@@ -1,0 +1,2411 @@
+Below is a detailed **developer-facing project manual** for your junior developers. It explains the full project idea, scope, data flow, modules, implementation responsibilities, testing plan, and expected final deliverables **without generating actual code**.
+
+# Project Manual: IMDb Search System Using Local MongoDB
+
+## 1. Project Overview
+
+This project will build a local IMDb search system using **MongoDB** as the database. The system will use selected IMDb dataset files, import the data into a local MongoDB database, create searchable movie/title documents, and provide a simple user interface where a user can search IMDb records.
+
+The user interface will allow users to select what they are looking for, choose filters such as title, genre, year, rating, and title type, then choose how many results they want to retrieve. The result range will be between **10 and 200 records**.
+
+The project should first be developed using a **small sample dataset** so that UI development and testing are fast. After the UI and search logic work correctly, the same system can be tested with a larger IMDb dataset.
+
+The main focus of the project is not only searching IMDb data. The main focus is to demonstrate:
+
+* local MongoDB database setup,
+* document-based data modeling,
+* importing real-world dataset files,
+* data cleaning,
+* MongoDB querying,
+* indexing,
+* result limiting,
+* search optimization,
+* and performance comparison.
+
+IMDb provides non-commercial datasets as gzipped TSV files and allows local copies for personal and non-commercial use under their license terms. The dataset files use headers in the first row and use `\N` to represent missing values. ([IMDB Developer][1])
+
+---
+
+# 2. Final Project Title
+
+Recommended title:
+
+## **IMDb Search and Query Optimization Using Local MongoDB**
+
+Alternative shorter title:
+
+## **IMDb Search System Using MongoDB**
+
+For the course, the first title is better because it clearly shows the database optimization focus.
+
+---
+
+# 3. Project Goal
+
+The goal of the project is:
+
+> To design and implement a local MongoDB-based IMDb search system that imports selected IMDb datasets, stores movie/title information as MongoDB documents, allows users to search and filter results through a user interface, and demonstrates how indexes improve search performance.
+
+The system should allow a user to search by:
+
+* title keyword,
+* title type,
+* genre,
+* year range,
+* minimum rating,
+* minimum number of votes,
+* and result limit from 10 to 200.
+
+The system should also show search execution time so that users can understand query performance.
+
+---
+
+# 4. Course Topic Alignment
+
+The project must remain based on the course topics.
+
+The course covered SQLite, Python database access, Flask, constraints, large datasets, MongoDB, MongoDB Atlas/local MongoDB, and MongoDB indexes. Since this project will use MongoDB, it should mainly connect to the later MongoDB and optimization topics.
+
+| Course Topic                  | How This Project Uses It                                                     |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| Intro to MongoDB / Mongita    | Uses document-oriented design, collections, documents, insert, find, filters |
+| Mongo App                     | Uses Python as the application layer connected to MongoDB                    |
+| MongoDB Atlas / Local MongoDB | Uses local MongoDB connection                                                |
+| Installing MongoDB            | Requires local MongoDB server setup                                          |
+| Mongo Indexes                 | Creates indexes on searchable fields                                         |
+| Large Dataset / Optimization  | Uses IMDb dataset and compares search performance                            |
+| Python Database Access        | Uses Python scripts for import, search, benchmark, and UI connection         |
+| Query Design                  | Uses filters, range queries, sorting, limiting, and index-supported searches |
+
+The project should **not** include unrelated features such as authentication, recommendation systems, machine learning, advanced frontend frameworks, or cloud deployment unless the core system is already finished.
+
+---
+
+# 5. Dataset Plan
+
+## 5.1 IMDb Files to Use
+
+Use only two IMDb files:
+
+1. `title.basics.tsv.gz`
+2. `title.ratings.tsv.gz`
+
+These two files are enough for the project.
+
+## 5.2 Why These Two Files?
+
+`title.basics.tsv.gz` contains the main information about movies, TV series, short films, and other title types.
+
+Important fields:
+
+| Field            | Meaning                                       |
+| ---------------- | --------------------------------------------- |
+| `tconst`         | Unique IMDb title ID                          |
+| `titleType`      | Type of title, such as movie, short, tvSeries |
+| `primaryTitle`   | Common title name                             |
+| `originalTitle`  | Original title name                           |
+| `isAdult`        | Adult content flag                            |
+| `startYear`      | Release/start year                            |
+| `endYear`        | End year for TV series                        |
+| `runtimeMinutes` | Runtime in minutes                            |
+| `genres`         | Comma-separated genre values                  |
+
+`title.ratings.tsv.gz` contains rating information.
+
+Important fields:
+
+| Field           | Meaning              |
+| --------------- | -------------------- |
+| `tconst`        | Unique IMDb title ID |
+| `averageRating` | Average IMDb rating  |
+| `numVotes`      | Number of votes      |
+
+The two files are connected using `tconst`.
+
+This means one record from `title.basics.tsv.gz` can be matched with one record from `title.ratings.tsv.gz`.
+
+---
+
+# 6. Dataset Size Strategy
+
+The full IMDb dataset can be large, so the project should not start with the full dataset.
+
+The project should be developed in two stages:
+
+## Stage 1: Sample Dataset
+
+Use a small sample first.
+
+Recommended size:
+
+```text
+10,000 records
+```
+
+This will be used for:
+
+* testing MongoDB connection,
+* verifying import logic,
+* building the UI,
+* testing filters,
+* testing result display,
+* debugging quickly.
+
+MongoDB collection name:
+
+```text
+titles_sample
+```
+
+## Stage 2: Larger Dataset
+
+After the system works with the sample collection, import a larger dataset.
+
+Recommended size:
+
+```text
+100,000 records
+```
+
+or more, depending on machine capacity.
+
+MongoDB collection name:
+
+```text
+titles_full
+```
+
+The same UI should be able to switch between `titles_sample` and `titles_full`.
+
+---
+
+# 7. High-Level System Architecture
+
+The system has five major parts:
+
+```text
+IMDb Dataset Files
+        ↓
+Data Import and Cleaning Script
+        ↓
+Local MongoDB Database
+        ↓
+Search and Query Layer
+        ↓
+User Interface
+```
+
+## 7.1 Data Layer
+
+Responsible for:
+
+* storing IMDb documents,
+* creating indexes,
+* executing queries,
+* returning results.
+
+## 7.2 Import Layer
+
+Responsible for:
+
+* reading compressed IMDb files,
+* cleaning values,
+* merging title and rating data,
+* inserting documents into MongoDB.
+
+## 7.3 Search Layer
+
+Responsible for:
+
+* receiving user search filters,
+* building MongoDB query conditions,
+* applying sorting,
+* applying result limit,
+* measuring execution time.
+
+## 7.4 UI Layer
+
+Responsible for:
+
+* showing search form,
+* accepting user input,
+* sending filters to search layer,
+* displaying results,
+* showing query execution time.
+
+## 7.5 Benchmark Layer
+
+Responsible for:
+
+* running selected test queries,
+* comparing performance before and after indexes,
+* showing whether MongoDB uses collection scan or index scan.
+
+MongoDB’s `explain` output can be used to inspect query plans, execution statistics, examined documents, and index usage. ([MongoDB][2])
+
+---
+
+# 8. Recommended Project Folder Structure
+
+The project should be organized clearly so junior developers can work module by module.
+
+```text
+imdb-mongo-search/
+│
+├── data/
+│   ├── title.basics.tsv.gz
+│   └── title.ratings.tsv.gz
+│
+├── docs/
+│   ├── project_report.md
+│   ├── benchmark_results.md
+│   └── screenshots/
+│
+├── download_data.py
+├── import_data.py
+├── database.py
+├── create_indexes.py
+├── search_service.py
+├── app.py
+├── benchmark.py
+├── reset_database.py
+├── requirements.txt
+└── README.md
+```
+
+## Folder and File Responsibilities
+
+### `data/`
+
+Stores downloaded IMDb dataset files.
+
+This folder should contain:
+
+```text
+title.basics.tsv.gz
+title.ratings.tsv.gz
+```
+
+Do not commit very large dataset files if the repository is being submitted through GitHub unless the instructor allows it. Instead, document how to download them.
+
+---
+
+### `docs/`
+
+Stores project explanation, screenshots, and benchmark result notes.
+
+Recommended files:
+
+```text
+project_report.md
+benchmark_results.md
+screenshots/
+```
+
+---
+
+### `download_data.py`
+
+Responsible for downloading IMDb dataset files.
+
+This file should:
+
+* create the `data/` folder if missing,
+* download `title.basics.tsv.gz`,
+* download `title.ratings.tsv.gz`,
+* avoid redownloading if files already exist,
+* print clear success or failure messages.
+
+This file is optional if the dataset is downloaded manually. However, having it makes the project more reproducible.
+
+---
+
+### `import_data.py`
+
+Responsible for importing IMDb data into MongoDB.
+
+This is one of the most important files.
+
+It should:
+
+* connect to local MongoDB,
+* read `title.ratings.tsv.gz`,
+* build an in-memory rating lookup by `tconst`,
+* read `title.basics.tsv.gz`,
+* clean each title row,
+* attach matching rating data,
+* create MongoDB documents,
+* insert documents into selected collection,
+* support sample import,
+* support larger import,
+* show progress during import,
+* skip invalid or incomplete records if necessary.
+
+It should support importing into either:
+
+```text
+titles_sample
+```
+
+or:
+
+```text
+titles_full
+```
+
+---
+
+### `database.py`
+
+Responsible for MongoDB connection.
+
+This file should contain:
+
+* MongoDB connection URI,
+* database name,
+* collection selection,
+* connection helper functions,
+* basic database health check.
+
+Expected database name:
+
+```text
+imdb_search
+```
+
+Expected local URI:
+
+```text
+mongodb://localhost:27017/
+```
+
+The collection should be configurable so the system can use either:
+
+```text
+titles_sample
+```
+
+or:
+
+```text
+titles_full
+```
+
+---
+
+### `create_indexes.py`
+
+Responsible for index creation.
+
+This file should create indexes on the fields commonly used for search and filtering.
+
+It should:
+
+* connect to the selected collection,
+* create single-field indexes,
+* create compound indexes,
+* print all indexes after creation,
+* avoid duplicate index creation problems.
+
+MongoDB supports different index types including single-field, compound, multikey, text, hashed, and others. This project mainly needs single-field, compound, and array/multikey-style indexing for genres. ([MongoDB][3])
+
+---
+
+### `search_service.py`
+
+Responsible for search logic.
+
+This file should not deal with UI layout. It should only receive filters and return search results.
+
+It should:
+
+* accept search parameters,
+* validate them,
+* convert them into MongoDB query conditions,
+* apply sorting,
+* apply result limit,
+* measure query time,
+* return both results and query metadata.
+
+This separation keeps the project clean.
+
+The UI should call `search_service.py`, and `search_service.py` should call MongoDB.
+
+---
+
+### `app.py`
+
+Responsible for the user interface.
+
+Since you said you may not use Flask, the UI can be implemented as a lightweight Python-based UI.
+
+For a fast 2-day project, the practical option is a simple UI where the user can select filters and see a table of results. The UI should remain simple because the main goal is database search and optimization, not frontend design.
+
+The UI should include:
+
+* project title,
+* collection selector,
+* keyword input,
+* title type selector,
+* genre selector,
+* year range inputs,
+* minimum rating input,
+* minimum votes input,
+* result limit selector from 10 to 200,
+* sort selector,
+* search button,
+* results table,
+* query time display.
+
+---
+
+### `benchmark.py`
+
+Responsible for performance testing.
+
+It should:
+
+* run predefined search queries,
+* measure execution time,
+* optionally run before and after indexes,
+* collect explain results,
+* print or save benchmark results.
+
+The benchmark output should include:
+
+* query name,
+* filter condition,
+* number of returned records,
+* execution time,
+* whether index was used,
+* documents examined,
+* documents returned,
+* improvement after indexing.
+
+MongoDB provides ways to measure index use using tools like `explain`, `$indexStats`, and related statistics. ([MongoDB][4])
+
+---
+
+### `reset_database.py`
+
+Responsible for clearing collections during development.
+
+It should support:
+
+* deleting `titles_sample`,
+* deleting `titles_full`,
+* optionally dropping indexes,
+* preparing for clean re-import.
+
+This is useful because during development the import process may need to be repeated several times.
+
+---
+
+### `requirements.txt`
+
+Should list only required Python packages.
+
+Possible packages:
+
+```text
+pymongo
+pandas
+streamlit
+```
+
+If the team chooses a command-line UI instead of graphical UI, `streamlit` is not needed.
+
+---
+
+### `README.md`
+
+This is the main project documentation.
+
+It should explain:
+
+* project purpose,
+* dataset used,
+* setup steps,
+* local MongoDB setup,
+* how to import data,
+* how to run the UI,
+* how to create indexes,
+* how to run benchmark,
+* sample searches,
+* limitations,
+* future work.
+
+---
+
+# 9. MongoDB Database Design
+
+## 9.1 Database Name
+
+Use:
+
+```text
+imdb_search
+```
+
+## 9.2 Collections
+
+Use two collections:
+
+```text
+titles_sample
+titles_full
+```
+
+## 9.3 Why Two Collections?
+
+Using two collections makes development easier.
+
+| Collection      | Purpose                                           |
+| --------------- | ------------------------------------------------- |
+| `titles_sample` | Small collection for UI development and debugging |
+| `titles_full`   | Larger collection for final performance testing   |
+
+The UI should be able to select which collection to search.
+
+This is helpful because junior developers can test quickly without waiting for the full dataset.
+
+---
+
+# 10. MongoDB Document Design
+
+Each document represents one IMDb title.
+
+## 10.1 Example Document
+
+```text
+{
+  tconst: "tt0111161",
+  titleType: "movie",
+  primaryTitle: "The Shawshank Redemption",
+  originalTitle: "The Shawshank Redemption",
+  searchTitle: "the shawshank redemption",
+  isAdult: false,
+  startYear: 1994,
+  endYear: null,
+  runtimeMinutes: 142,
+  genres: ["Drama"],
+  rating: {
+    averageRating: 9.3,
+    numVotes: 2950000
+  },
+  importedAt: timestamp
+}
+```
+
+## 10.2 Field Explanation
+
+| Field                  | Type             | Purpose                                      |
+| ---------------------- | ---------------- | -------------------------------------------- |
+| `tconst`               | string           | IMDb unique title ID                         |
+| `titleType`            | string           | movie, tvSeries, short, video, etc.          |
+| `primaryTitle`         | string           | main title shown to users                    |
+| `originalTitle`        | string           | original title                               |
+| `searchTitle`          | string           | lowercase version of title for easier search |
+| `isAdult`              | boolean          | adult content flag                           |
+| `startYear`            | integer or null  | release/start year                           |
+| `endYear`              | integer or null  | end year for TV series                       |
+| `runtimeMinutes`       | integer or null  | runtime                                      |
+| `genres`               | array of strings | searchable genre list                        |
+| `rating.averageRating` | float or null    | IMDb average rating                          |
+| `rating.numVotes`      | integer or null  | number of votes                              |
+| `importedAt`           | date/time        | when the record was imported                 |
+
+## 10.3 Why Embed Rating Inside Title?
+
+The IMDb source files are separate, but MongoDB allows related data to be embedded.
+
+The app usually displays title and rating together.
+
+So instead of storing ratings in a separate collection, embed rating inside each title document:
+
+```text
+rating.averageRating
+rating.numVotes
+```
+
+This avoids needing a join-like operation during search.
+
+## 10.4 Why Store Genres as an Array?
+
+IMDb genres are comma-separated in the source file.
+
+Example:
+
+```text
+Action,Crime,Drama
+```
+
+In MongoDB, store this as:
+
+```text
+["Action", "Crime", "Drama"]
+```
+
+This allows simple genre filtering.
+
+Example user filter:
+
+```text
+Genre = Action
+```
+
+MongoDB can match documents where the `genres` array contains `"Action"`.
+
+MongoDB array fields can also be indexed; MongoDB treats this as a multikey index.
+
+---
+
+# 11. Data Cleaning Rules
+
+Data cleaning is essential because IMDb source files store all values as text.
+
+The import process must convert values into useful database types.
+
+| IMDb Raw Value      | Stored Value                |
+| ------------------- | --------------------------- |
+| `\N`                | null                        |
+| `"1994"`            | integer `1994`              |
+| `"142"`             | integer `142`               |
+| `"9.3"`             | float `9.3`                 |
+| `"2950000"`         | integer `2950000`           |
+| `"Action,Drama"`    | array `["Action", "Drama"]` |
+| `"0"` for `isAdult` | false                       |
+| `"1"` for `isAdult` | true                        |
+
+## 11.1 Missing Values
+
+IMDb uses:
+
+```text
+\N
+```
+
+for missing values.
+
+These should never be stored as the literal string `"\N"`.
+
+They should be converted to:
+
+```text
+null
+```
+
+This matters because filtering numeric fields will not work correctly if missing values are stored as strings.
+
+## 11.2 Year Conversion
+
+`startYear` and `endYear` should be integers when present.
+
+Bad:
+
+```text
+"2005"
+```
+
+Good:
+
+```text
+2005
+```
+
+## 11.3 Rating Conversion
+
+`averageRating` should be a float.
+
+Bad:
+
+```text
+"8.2"
+```
+
+Good:
+
+```text
+8.2
+```
+
+## 11.4 Votes Conversion
+
+`numVotes` should be an integer.
+
+Bad:
+
+```text
+"1500000"
+```
+
+Good:
+
+```text
+1500000
+```
+
+## 11.5 Genre Conversion
+
+If the raw genre value is:
+
+```text
+Action,Crime,Drama
+```
+
+store it as:
+
+```text
+["Action", "Crime", "Drama"]
+```
+
+If the raw value is missing:
+
+```text
+\N
+```
+
+store it as:
+
+```text
+[]
+```
+
+or:
+
+```text
+null
+```
+
+Recommended choice:
+
+```text
+[]
+```
+
+because it makes genre filtering easier and avoids null-related checks.
+
+---
+
+# 12. Data Import Workflow
+
+The import process should follow this exact sequence.
+
+## Step 1: Start Local MongoDB
+
+Before importing, local MongoDB must be running.
+
+The database server should be available at:
+
+```text
+mongodb://localhost:27017/
+```
+
+## Step 2: Connect to MongoDB
+
+Connect to:
+
+```text
+Database: imdb_search
+Collection: titles_sample or titles_full
+```
+
+## Step 3: Clear Existing Collection
+
+During development, the import script should optionally clear the selected collection before inserting new data.
+
+This prevents duplicate records.
+
+## Step 4: Read Ratings File First
+
+Read `title.ratings.tsv.gz`.
+
+Build a lookup structure using `tconst`.
+
+Conceptually:
+
+```text
+rating_lookup[tconst] = {
+  averageRating,
+  numVotes
+}
+```
+
+Reason:
+
+When reading title records later, the import process can quickly attach rating information.
+
+## Step 5: Read Title Basics File
+
+Read `title.basics.tsv.gz` row by row.
+
+For each row:
+
+1. Read `tconst`.
+2. Check whether this title has a rating.
+3. Clean title fields.
+4. Convert data types.
+5. Convert genre string into array.
+6. Attach rating object.
+7. Build MongoDB document.
+8. Insert into collection.
+
+## Step 6: Apply Development Filters
+
+For sample UI development, do not import everything.
+
+Use filters such as:
+
+```text
+titleType = movie
+rating exists
+startYear is not missing
+numVotes >= 1000
+```
+
+This creates a cleaner sample collection.
+
+Why?
+
+Because if the first 10,000 IMDb rows are imported directly, many may be old, obscure, unrated, or not useful for UI testing.
+
+A better sample should include searchable and recognizable records.
+
+## Step 7: Apply Record Limit
+
+For sample mode:
+
+```text
+Maximum records = 10,000
+```
+
+For larger mode:
+
+```text
+Maximum records = 100,000 or more
+```
+
+## Step 8: Insert in Batches
+
+For performance, insert documents in batches rather than one by one.
+
+Recommended batch size:
+
+```text
+500 to 5000 documents per batch
+```
+
+This makes import faster and reduces database overhead.
+
+## Step 9: Print Import Summary
+
+At the end, print:
+
+```text
+Collection name
+Total rows read
+Total ratings loaded
+Total documents inserted
+Total skipped records
+Import duration
+```
+
+---
+
+# 13. Search Requirements
+
+The search system must support these user filters.
+
+## 13.1 Keyword Search
+
+User enters:
+
+```text
+Batman
+```
+
+System searches in:
+
+```text
+primaryTitle
+```
+
+Recommended behavior:
+
+* case-insensitive matching,
+* support partial matching,
+* allow empty keyword.
+
+Important note: normal indexes help regular expression searches mainly when the regex is prefix-based. MongoDB documentation explains that prefix expressions can use an index more effectively because MongoDB can construct a range from that prefix. ([MongoDB][5])
+
+So the project should explain this limitation:
+
+> A title contains-search such as “contains Batman” may not always benefit from a normal index. A prefix search such as titles starting with “Batman” is more index-friendly.
+
+## 13.2 Title Type Filter
+
+User can choose:
+
+```text
+Any
+movie
+short
+tvSeries
+tvMovie
+video
+tvMiniSeries
+tvEpisode
+```
+
+For the first version, it is acceptable to focus mainly on:
+
+```text
+movie
+tvSeries
+short
+```
+
+## 13.3 Genre Filter
+
+User can choose:
+
+```text
+Any
+Action
+Adventure
+Animation
+Comedy
+Crime
+Documentary
+Drama
+Family
+Fantasy
+Horror
+Mystery
+Romance
+Sci-Fi
+Thriller
+War
+Western
+```
+
+The system should match documents where the selected genre exists inside the `genres` array.
+
+## 13.4 Year Range Filter
+
+User can select:
+
+```text
+Start year
+End year
+```
+
+Example:
+
+```text
+2000 to 2024
+```
+
+Rules:
+
+* if both start and end are given, use range query,
+* if only start is given, use `greater than or equal`,
+* if only end is given, use `less than or equal`,
+* if neither is given, do not apply year filter.
+
+## 13.5 Rating Filter
+
+User can select minimum rating.
+
+Example:
+
+```text
+minimum rating = 7.5
+```
+
+System should match:
+
+```text
+rating.averageRating >= 7.5
+```
+
+## 13.6 Vote Filter
+
+User can select minimum number of votes.
+
+Example:
+
+```text
+minimum votes = 10000
+```
+
+System should match:
+
+```text
+rating.numVotes >= 10000
+```
+
+This is important because a title with rating 9.5 and only 5 votes may not be meaningful.
+
+## 13.7 Result Limit
+
+The user must select how many results to fetch.
+
+Allowed range:
+
+```text
+10 to 200
+```
+
+Recommended UI choices:
+
+```text
+10
+20
+50
+100
+200
+```
+
+The backend must validate this.
+
+Rules:
+
+* if user selects less than 10, use 10,
+* if user selects more than 200, use 200,
+* default value should be 50.
+
+## 13.8 Sort Options
+
+User can sort by:
+
+```text
+Rating high to low
+Votes high to low
+Year newest first
+Year oldest first
+Title A-Z
+```
+
+Recommended default:
+
+```text
+Rating high to low
+```
+
+---
+
+# 14. Search Query Construction Logic
+
+The search layer should build a query dynamically based on user input.
+
+## 14.1 Empty Search
+
+If the user provides no filters, the system should not return the whole database without limit.
+
+It should still apply:
+
+```text
+limit = selected result limit
+sort = selected sort
+```
+
+This prevents accidentally loading thousands of records.
+
+## 14.2 Combined Search Example
+
+User input:
+
+```text
+Keyword: Batman
+Title type: movie
+Genre: Action
+Start year: 2000
+End year: 2024
+Minimum rating: 7.0
+Minimum votes: 10000
+Limit: 50
+Sort: Rating high to low
+```
+
+Conceptual MongoDB filter:
+
+```text
+primaryTitle matches Batman, case-insensitive
+titleType equals movie
+genres contains Action
+startYear between 2000 and 2024
+rating.averageRating greater than or equal to 7.0
+rating.numVotes greater than or equal to 10000
+limit 50
+sort by rating.averageRating descending
+```
+
+## 14.3 Query Timing
+
+Every search should measure execution time.
+
+UI should show:
+
+```text
+Returned 50 results in 32 ms
+```
+
+This makes the project visibly connected to database performance.
+
+---
+
+# 15. UI Requirements
+
+The UI should be simple, clear, and focused on database search.
+
+## 15.1 Main Screen Layout
+
+Recommended layout:
+
+```text
+--------------------------------------------------
+IMDb Search System Using Local MongoDB
+--------------------------------------------------
+
+Collection:
+[ titles_sample / titles_full ]
+
+Keyword:
+[ text input ]
+
+Title Type:
+[ Any / movie / tvSeries / short / video ]
+
+Genre:
+[ Any / Action / Comedy / Drama / ... ]
+
+Year Range:
+[ Start Year ] to [ End Year ]
+
+Minimum Rating:
+[ 0.0 - 10.0 ]
+
+Minimum Votes:
+[ number input ]
+
+Result Limit:
+[ 10 - 200 ]
+
+Sort By:
+[ Rating / Votes / Year / Title ]
+
+[ Search Button ]
+
+--------------------------------------------------
+Query Time: 32 ms
+Results Returned: 50
+--------------------------------------------------
+
+Results Table
+--------------------------------------------------
+```
+
+## 15.2 Results Table Columns
+
+Display these columns:
+
+| Column         | Description            |
+| -------------- | ---------------------- |
+| Title          | `primaryTitle`         |
+| Original Title | `originalTitle`        |
+| Type           | `titleType`            |
+| Year           | `startYear`            |
+| Runtime        | `runtimeMinutes`       |
+| Genres         | joined genre list      |
+| Rating         | `rating.averageRating` |
+| Votes          | `rating.numVotes`      |
+| IMDb ID        | `tconst`               |
+
+## 15.3 UI Behavior
+
+The UI should:
+
+* not crash if no results are found,
+* show a friendly “No results found” message,
+* show query time even if no results are found,
+* validate result limit,
+* handle missing ratings,
+* handle missing years,
+* allow users to reset filters.
+
+## 15.4 UI Testing Dataset
+
+The UI should first connect to:
+
+```text
+titles_sample
+```
+
+After all features are working, it can connect to:
+
+```text
+titles_full
+```
+
+---
+
+# 16. Indexing Requirements
+
+Indexing is a major part of the project.
+
+The team must create indexes after importing data.
+
+## 16.1 Required Single-Field Indexes
+
+Create indexes on:
+
+```text
+tconst
+primaryTitle
+searchTitle
+titleType
+startYear
+genres
+rating.averageRating
+rating.numVotes
+```
+
+## 16.2 Required Compound Indexes
+
+Create compound indexes for common combined searches.
+
+Recommended compound indexes:
+
+```text
+titleType + startYear
+```
+
+Purpose:
+
+* filtering movies by year range.
+
+```text
+genres + startYear + rating.averageRating
+```
+
+Purpose:
+
+* filtering genre and year, then sorting/filtering by rating.
+
+```text
+titleType + genres + startYear + rating.averageRating
+```
+
+Purpose:
+
+* combined movie search with title type, genre, year, and rating.
+
+MongoDB recommends thinking carefully about compound index order. The Equality, Sort, Range guideline says equality fields usually come first, followed by sort and range fields depending on query needs. ([MongoDB][6])
+
+## 16.3 Indexing Explanation for Report
+
+The report should explain:
+
+* `titleType` is used for equality filtering,
+* `genres` is used for equality filtering inside an array,
+* `startYear` is used for range filtering,
+* `rating.averageRating` is used for sorting/filtering,
+* compound indexes help multi-condition queries.
+
+## 16.4 Text Search Option
+
+MongoDB has text indexes for `$text` queries on string fields, and a collection can have one text index that may cover multiple fields. ([MongoDB][7])
+
+However, since the course appears to focus more on general MongoDB indexes, text search should be optional.
+
+Recommended decision:
+
+* Use regular indexes for the main project.
+* Mention text index as future improvement or optional extension.
+* Do not depend on Atlas Search because the project is local MongoDB.
+
+---
+
+# 17. Benchmark Requirements
+
+Benchmarking makes the project stronger.
+
+The team should compare query performance before and after indexes.
+
+## 17.1 Benchmark Workflow
+
+The benchmark should follow this process:
+
+1. Import sample or larger dataset.
+2. Drop non-default indexes.
+3. Run benchmark queries.
+4. Record execution time and explain output.
+5. Create indexes.
+6. Run the same benchmark queries again.
+7. Record execution time and explain output.
+8. Compare results.
+
+## 17.2 Benchmark Queries
+
+Use these queries:
+
+### Query 1: Genre Search
+
+```text
+Find Action titles
+Limit 100
+Sort by rating high to low
+```
+
+### Query 2: Year Range Search
+
+```text
+Find titles from 2000 to 2020
+Limit 100
+Sort by year newest first
+```
+
+### Query 3: Rating Search
+
+```text
+Find titles with rating >= 8.0
+Limit 100
+Sort by rating high to low
+```
+
+### Query 4: Votes Search
+
+```text
+Find titles with numVotes >= 10000
+Limit 100
+Sort by votes high to low
+```
+
+### Query 5: Combined Search
+
+```text
+Find movie titles
+Genre = Drama
+Year between 2000 and 2024
+Rating >= 7.5
+Votes >= 10000
+Limit 100
+Sort by rating high to low
+```
+
+## 17.3 Metrics to Collect
+
+For each query, collect:
+
+| Metric             | Meaning                            |
+| ------------------ | ---------------------------------- |
+| Query name         | Name of test case                  |
+| Filters used       | What the query searched            |
+| Result limit       | Usually 100                        |
+| Execution time     | Time taken to return results       |
+| Documents returned | Number of output documents         |
+| Documents examined | How many documents MongoDB scanned |
+| Index used         | Yes/no                             |
+| Winning stage      | `COLLSCAN` or `IXSCAN`             |
+| Improvement        | before time divided by after time  |
+
+MongoDB explain results can show query execution details such as execution time, index usage, and documents scanned. ([MongoDB][8])
+
+## 17.4 Expected Benchmark Table
+
+The final report should include a table like this:
+
+| Query           | Before Index | After Index | Improvement | Plan Before | Plan After |
+| --------------- | -----------: | ----------: | ----------: | ----------- | ---------- |
+| Genre = Action  |       150 ms |       20 ms |        7.5x | COLLSCAN    | IXSCAN     |
+| Year 2000–2020  |       180 ms |       25 ms |        7.2x | COLLSCAN    | IXSCAN     |
+| Rating ≥ 8      |       210 ms |       30 ms |        7.0x | COLLSCAN    | IXSCAN     |
+| Combined Search |       300 ms |       40 ms |        7.5x | COLLSCAN    | IXSCAN     |
+
+The exact numbers will depend on dataset size and machine.
+
+---
+
+# 18. Local MongoDB Setup Requirements
+
+The project uses local MongoDB.
+
+## 18.1 Expected Local Connection
+
+```text
+mongodb://localhost:27017/
+```
+
+## 18.2 Database Name
+
+```text
+imdb_search
+```
+
+## 18.3 Collections
+
+```text
+titles_sample
+titles_full
+```
+
+## 18.4 Developer Checklist
+
+Before running the project, each developer must verify:
+
+```text
+MongoDB server is installed
+MongoDB server is running
+Python environment is active
+Required packages are installed
+IMDb data files are present in data/
+Connection to localhost:27017 works
+```
+
+---
+
+# 19. Detailed Development Phases
+
+## Phase 1: Repository Setup
+
+Goal:
+
+Create the project folder and files.
+
+Tasks:
+
+1. Create main project folder.
+2. Create `data/` folder.
+3. Create `docs/` folder.
+4. Create initial empty project files.
+5. Create README.
+6. Add requirements file.
+7. Add `.gitignore`.
+
+Expected output:
+
+```text
+Project structure is ready.
+Developers know where each module belongs.
+```
+
+---
+
+## Phase 2: Dataset Download
+
+Goal:
+
+Download IMDb files.
+
+Tasks:
+
+1. Download `title.basics.tsv.gz`.
+2. Download `title.ratings.tsv.gz`.
+3. Save both inside `data/`.
+4. Verify file sizes.
+5. Verify files can be opened as compressed TSV files.
+
+Expected output:
+
+```text
+data/title.basics.tsv.gz exists
+data/title.ratings.tsv.gz exists
+```
+
+---
+
+## Phase 3: MongoDB Connection
+
+Goal:
+
+Connect Python project to local MongoDB.
+
+Tasks:
+
+1. Start local MongoDB server.
+2. Connect to `mongodb://localhost:27017/`.
+3. Select database `imdb_search`.
+4. Select collection `titles_sample`.
+5. Test inserting one small test document.
+6. Test reading that document.
+7. Remove test document.
+
+Expected output:
+
+```text
+Python application can connect to local MongoDB.
+```
+
+---
+
+## Phase 4: Import Ratings Data
+
+Goal:
+
+Read ratings data and prepare lookup.
+
+Tasks:
+
+1. Open `title.ratings.tsv.gz`.
+2. Read header.
+3. For each row, read:
+
+   * `tconst`,
+   * `averageRating`,
+   * `numVotes`.
+4. Convert rating to float.
+5. Convert votes to integer.
+6. Store rating by `tconst`.
+7. Skip invalid rows if needed.
+8. Print number of ratings loaded.
+
+Expected output:
+
+```text
+Ratings lookup is created successfully.
+```
+
+---
+
+## Phase 5: Import Title Data
+
+Goal:
+
+Read title data, clean it, combine it with ratings, and insert into MongoDB.
+
+Tasks:
+
+1. Open `title.basics.tsv.gz`.
+2. Read header.
+3. For each row:
+
+   * read `tconst`,
+   * read title fields,
+   * clean missing values,
+   * convert year/runtime values,
+   * convert genres to array,
+   * attach rating data,
+   * build MongoDB document.
+4. Apply sample filter.
+5. Stop after sample limit.
+6. Insert documents in batches.
+7. Print import summary.
+
+Expected output:
+
+```text
+10,000 useful IMDb documents imported into titles_sample.
+```
+
+---
+
+## Phase 6: Validate Imported Data
+
+Goal:
+
+Make sure the data is correct.
+
+Validation checklist:
+
+1. Collection has expected number of documents.
+2. `tconst` exists.
+3. `primaryTitle` exists.
+4. `startYear` is integer or null.
+5. `genres` is array.
+6. `rating.averageRating` is float or null.
+7. `rating.numVotes` is integer or null.
+8. No literal `\N` values remain.
+9. Searchable records exist for common genres like Action, Drama, Comedy.
+
+Expected output:
+
+```text
+Imported documents are clean and searchable.
+```
+
+---
+
+## Phase 7: Search Service
+
+Goal:
+
+Create reusable search logic.
+
+The search service should accept:
+
+```text
+collection name
+keyword
+title type
+genre
+start year
+end year
+minimum rating
+minimum votes
+result limit
+sort option
+```
+
+It should return:
+
+```text
+list of result documents
+query execution time
+number of returned records
+query metadata
+```
+
+Validation rules:
+
+| Input         | Rule                                |
+| ------------- | ----------------------------------- |
+| Result limit  | Must be between 10 and 200          |
+| Rating        | Must be between 0 and 10            |
+| Start year    | Must be valid integer if provided   |
+| End year      | Must be valid integer if provided   |
+| Minimum votes | Must be non-negative                |
+| Empty filters | Allowed, but limit must still apply |
+
+Expected output:
+
+```text
+Search service can return filtered IMDb documents.
+```
+
+---
+
+## Phase 8: UI Development
+
+Goal:
+
+Build a user interface for search.
+
+UI requirements:
+
+1. Show project title.
+2. Allow collection selection.
+3. Allow keyword search.
+4. Allow title type selection.
+5. Allow genre selection.
+6. Allow year range selection.
+7. Allow minimum rating selection.
+8. Allow minimum votes selection.
+9. Allow result limit from 10 to 200.
+10. Allow sorting.
+11. Show search results.
+12. Show query time.
+13. Show number of returned results.
+14. Handle no-result cases.
+
+Expected output:
+
+```text
+A user can search IMDb data without writing database queries.
+```
+
+---
+
+## Phase 9: Index Creation
+
+Goal:
+
+Create indexes for search optimization.
+
+Tasks:
+
+1. Create required single-field indexes.
+2. Create compound indexes.
+3. Print index list.
+4. Confirm indexes exist.
+
+Expected output:
+
+```text
+Indexes are created on searchable fields.
+```
+
+---
+
+## Phase 10: Benchmarking
+
+Goal:
+
+Compare performance before and after indexes.
+
+Tasks:
+
+1. Drop non-default indexes.
+2. Run benchmark queries.
+3. Save before-index results.
+4. Create indexes.
+5. Run same benchmark queries again.
+6. Save after-index results.
+7. Compare times.
+8. Save results to documentation.
+
+Expected output:
+
+```text
+Benchmark table showing index impact.
+```
+
+---
+
+## Phase 11: Larger Dataset Test
+
+Goal:
+
+Test the same system with larger collection.
+
+Tasks:
+
+1. Import 100,000 or more records into `titles_full`.
+2. Create indexes on `titles_full`.
+3. Run same UI searches.
+4. Run benchmark.
+5. Compare with sample behavior.
+
+Expected output:
+
+```text
+System works with larger dataset.
+Performance benefit of indexes is more visible.
+```
+
+---
+
+## Phase 12: Final Documentation
+
+Goal:
+
+Prepare final submission.
+
+Documentation must include:
+
+1. Project title.
+2. Project objective.
+3. Dataset description.
+4. MongoDB document design.
+5. Import process.
+6. UI features.
+7. Search filters.
+8. Indexes used.
+9. Benchmark results.
+10. Screenshots.
+11. Limitations.
+12. Future work.
+
+Expected output:
+
+```text
+Project is ready for submission and demo.
+```
+
+---
+
+# 20. Developer Task Assignment
+
+For a small team, divide tasks like this.
+
+## Developer 1: Data Import
+
+Responsibilities:
+
+* download dataset,
+* read compressed TSV files,
+* clean data,
+* merge titles and ratings,
+* insert into MongoDB,
+* create sample and full collections.
+
+Deliverables:
+
+```text
+download_data.py
+import_data.py
+data validation notes
+```
+
+---
+
+## Developer 2: Database and Search Service
+
+Responsibilities:
+
+* MongoDB connection,
+* collection selection,
+* search query building,
+* sorting,
+* result limiting,
+* query timing.
+
+Deliverables:
+
+```text
+database.py
+search_service.py
+search tests
+```
+
+---
+
+## Developer 3: UI
+
+Responsibilities:
+
+* build search form,
+* connect form to search service,
+* display result table,
+* display query time,
+* handle no-result and invalid input cases.
+
+Deliverables:
+
+```text
+app.py
+UI screenshots
+```
+
+---
+
+## Developer 4: Indexing and Benchmark
+
+Responsibilities:
+
+* create indexes,
+* run benchmark before/after indexes,
+* collect explain information,
+* write benchmark results.
+
+Deliverables:
+
+```text
+create_indexes.py
+benchmark.py
+benchmark_results.md
+```
+
+If the team is small, one person can handle multiple roles.
+
+---
+
+# 21. Acceptance Criteria
+
+The project is considered complete when all of these are true.
+
+## Data Criteria
+
+* IMDb files are downloaded.
+* Sample collection is imported.
+* At least 10,000 documents are available.
+* Documents have clean data types.
+* Ratings are embedded correctly.
+* Genres are stored as arrays.
+
+## MongoDB Criteria
+
+* Local MongoDB connection works.
+* Database name is `imdb_search`.
+* Collection `titles_sample` exists.
+* Indexes are created.
+* Search queries return correct records.
+
+## UI Criteria
+
+* User can search by keyword.
+* User can filter by title type.
+* User can filter by genre.
+* User can filter by year range.
+* User can filter by rating.
+* User can filter by votes.
+* User can select result limit from 10 to 200.
+* Results are displayed clearly.
+* Query time is displayed.
+
+## Benchmark Criteria
+
+* At least four benchmark queries are tested.
+* Before-index time is recorded.
+* After-index time is recorded.
+* Explain output is summarized.
+* Index impact is explained.
+
+## Documentation Criteria
+
+* README explains setup and usage.
+* Report explains database design.
+* Screenshots are included.
+* Benchmark table is included.
+* Limitations and future work are included.
+
+---
+
+# 22. Sample User Scenarios
+
+## Scenario 1: Search by Title
+
+User wants to find Batman titles.
+
+Input:
+
+```text
+Keyword: Batman
+Result limit: 50
+Sort: Rating high to low
+```
+
+Expected behavior:
+
+* system searches title field,
+* returns matching Batman records,
+* displays top 50 results,
+* shows query time.
+
+---
+
+## Scenario 2: Search by Genre
+
+User wants Action movies.
+
+Input:
+
+```text
+Genre: Action
+Title type: movie
+Minimum rating: 7.0
+Result limit: 100
+```
+
+Expected behavior:
+
+* system filters genre array,
+* filters title type,
+* filters rating,
+* returns up to 100 results.
+
+---
+
+## Scenario 3: Search by Year Range
+
+User wants movies from 2010 to 2020.
+
+Input:
+
+```text
+Title type: movie
+Start year: 2010
+End year: 2020
+Result limit: 50
+Sort: Year newest first
+```
+
+Expected behavior:
+
+* system uses year range query,
+* returns movies in selected years,
+* sorts newest first.
+
+---
+
+## Scenario 4: Search Highly Rated Popular Movies
+
+User wants popular high-rated films.
+
+Input:
+
+```text
+Title type: movie
+Minimum rating: 8.0
+Minimum votes: 50000
+Result limit: 100
+Sort: Rating high to low
+```
+
+Expected behavior:
+
+* system filters rating,
+* filters vote count,
+* returns popular high-rated movies.
+
+---
+
+## Scenario 5: Combined Search
+
+User wants recent Action movies with good ratings.
+
+Input:
+
+```text
+Title type: movie
+Genre: Action
+Start year: 2000
+End year: 2024
+Minimum rating: 7.0
+Minimum votes: 10000
+Result limit: 50
+Sort: Rating high to low
+```
+
+Expected behavior:
+
+* system applies all filters together,
+* returns relevant results,
+* uses compound indexes where possible.
+
+---
+
+# 23. Important Implementation Notes
+
+## 23.1 Do Not Import Full Data First
+
+The full dataset may slow down development.
+
+Start with:
+
+```text
+titles_sample
+```
+
+Only after the UI works, use:
+
+```text
+titles_full
+```
+
+## 23.2 Validate Data Types
+
+MongoDB queries depend on correct data types.
+
+If `startYear` is stored as string, range queries may behave incorrectly.
+
+Correct:
+
+```text
+startYear: 2005
+```
+
+Incorrect:
+
+```text
+startYear: "2005"
+```
+
+## 23.3 Do Not Store `\N`
+
+No field should contain raw `\N`.
+
+Convert it to null or empty array.
+
+## 23.4 Always Limit Results
+
+The UI must always use a result limit.
+
+Never return the whole collection.
+
+## 23.5 Index After Import
+
+Indexes should usually be created after bulk import.
+
+Reason:
+
+* importing into an indexed collection can be slower,
+* creating indexes after import is cleaner for this project.
+
+## 23.6 Be Careful with Regex Search
+
+Title keyword search using regular expressions may not always use indexes efficiently.
+
+Prefix-style regex can be more index-friendly than contains-style regex. MongoDB documentation specifically notes that prefix expressions can use indexes more effectively. ([MongoDB][5])
+
+For the report, explain:
+
+> Genre, year, rating, and title type filters benefit more clearly from indexes. Title keyword search with contains-style regex is useful for the UI but may not always show large index improvement.
+
+## 23.7 Use Explain for Database-Focused Analysis
+
+The benchmark should not rely only on time.
+
+Use explain summaries to show:
+
+```text
+COLLSCAN before index
+IXSCAN after index
+documents examined reduced
+execution time reduced
+```
+
+---
+
+# 24. Final Demo Plan
+
+The final demo should follow this order.
+
+## Step 1: Show Project Structure
+
+Briefly show:
+
+```text
+data/
+import_data.py
+database.py
+search_service.py
+create_indexes.py
+app.py
+benchmark.py
+README.md
+```
+
+## Step 2: Show Dataset
+
+Show that the data folder has:
+
+```text
+title.basics.tsv.gz
+title.ratings.tsv.gz
+```
+
+## Step 3: Show MongoDB Collection
+
+Show:
+
+```text
+Database: imdb_search
+Collection: titles_sample
+Document count: 10,000
+```
+
+## Step 4: Show Sample Document
+
+Show one imported document with:
+
+```text
+title
+year
+genres
+rating
+votes
+```
+
+## Step 5: Show UI Search
+
+Search example:
+
+```text
+Title type: movie
+Genre: Action
+Year: 2000–2024
+Minimum rating: 7.0
+Limit: 50
+```
+
+## Step 6: Show Result Table
+
+Explain:
+
+```text
+The UI displays only the selected number of records.
+The backend query applies MongoDB filters and limit.
+```
+
+## Step 7: Show Query Time
+
+Point out:
+
+```text
+Query completed in X ms
+```
+
+## Step 8: Show Indexes
+
+Show created indexes.
+
+## Step 9: Show Benchmark
+
+Show before/after table.
+
+## Step 10: Explain Learning Outcome
+
+Say:
+
+> This project demonstrates how MongoDB stores flexible documents, how real-world IMDb data can be cleaned and imported, how users can search using multiple filters, and how indexes improve query performance on larger datasets.
+
+---
+
+# 25. Final Report Structure
+
+Use this structure for the final report.
+
+## 1. Introduction
+
+Explain the motivation.
+
+Example:
+
+> IMDb contains large-scale title and rating information. Searching this data efficiently requires proper data modeling, indexing, and query design. This project builds a local MongoDB-based search system to demonstrate these concepts.
+
+## 2. Dataset
+
+Explain:
+
+* source files,
+* fields used,
+* reason for using only two files,
+* missing value handling.
+
+## 3. System Architecture
+
+Include a diagram like:
+
+```text
+IMDb Files → Import Script → MongoDB → Search Service → UI
+```
+
+## 4. MongoDB Document Design
+
+Show document structure and explain embedded rating.
+
+## 5. Data Import Process
+
+Explain:
+
+* ratings loaded first,
+* titles read second,
+* cleaning rules,
+* sample and full collections.
+
+## 6. Search Interface
+
+Explain all filters and result limit.
+
+## 7. Index Design
+
+List indexes and justify them.
+
+## 8. Benchmark Results
+
+Show before/after index table.
+
+## 9. Limitations
+
+Mention:
+
+* only two IMDb files used,
+* actor/director search not included,
+* full-text search not deeply implemented,
+* regex title search may not always benefit from normal index,
+* local MongoDB only.
+
+## 10. Future Work
+
+Mention:
+
+* add actor/director search,
+* add text index,
+* add Atlas Search,
+* add pagination,
+* add charts,
+* add user watchlist.
+
+---
+
+# 26. Minimum Viable Product
+
+For the 2-day deadline, the minimum acceptable version should include:
+
+```text
+Local MongoDB connection
+IMDb sample import
+Clean MongoDB documents
+Search UI
+Filters for title, genre, year, rating
+Result limit 10–200
+Indexes
+Benchmark table
+README
+```
+
+This is enough for a solid project.
+
+---
+
+# 27. Recommended Priority Order
+
+Because time is limited, follow this exact order:
+
+## Must Finish First
+
+1. Local MongoDB connection.
+2. Import 10,000 sample documents.
+3. Search query function.
+4. UI search form.
+5. Result table.
+6. Result limit 10–200.
+
+## Finish Next
+
+7. Index creation.
+8. Query timing.
+9. Benchmark script.
+10. README.
+
+## Finish If Time Allows
+
+11. Larger collection.
+12. Explain output summary.
+13. Screenshots.
+14. More polished UI.
+15. Optional text index.
+
+---
+
+# 28. Risk Management
+
+## Risk 1: Full IMDb Data Is Too Large
+
+Solution:
+
+Use sample collection first.
+
+## Risk 2: Import Takes Too Long
+
+Solution:
+
+Use record limit and batch insert.
+
+## Risk 3: UI Development Takes Too Long
+
+Solution:
+
+Keep UI simple. Use basic inputs and result table.
+
+## Risk 4: Index Improvement Is Not Obvious on Small Dataset
+
+Solution:
+
+Use larger collection for benchmark if possible.
+
+## Risk 5: Regex Search Does Not Improve Much
+
+Solution:
+
+Explain that regex contains-search is not ideal for normal index. Focus benchmark on genre, year, rating, and compound filters.
+
+---
+
+# 29. Final One-Paragraph Project Description
+
+You can give this to your developers as the official summary:
+
+> This project builds a local MongoDB-based IMDb search system. The system downloads selected IMDb dataset files, imports title and rating data into MongoDB, stores each title as a document with embedded rating information and genre arrays, and provides a user interface where users can search by keyword, title type, genre, year range, rating, votes, and result limit. Development will first use a small sample collection for fast UI testing, then a larger collection for performance evaluation. The project demonstrates MongoDB document design, local database connectivity, data cleaning, search query construction, indexes, result limiting, and query optimization using a real-world dataset.
+
+This manual should be enough for junior developers to understand the full project requirements and start implementation cleanly.
+
+[1]: https://developer.imdb.com/non-commercial-datasets/?utm_source=chatgpt.com "IMDb Non-Commercial Datasets"
+[2]: https://www.mongodb.com/docs/manual/reference/explain-results/?utm_source=chatgpt.com "Explain Results - Database Manual - MongoDB Docs"
+[3]: https://www.mongodb.com/docs/manual/core/indexes/index-types/?utm_source=chatgpt.com "Index Types - Database Manual - MongoDB Docs"
+[4]: https://www.mongodb.com/docs/manual/tutorial/measure-index-use/?utm_source=chatgpt.com "Measure Index Use - Database Manual - MongoDB Docs"
+[5]: https://www.mongodb.com/docs/manual/reference/operator/query/regex/?utm_source=chatgpt.com "$regex (query predicate operator) - Database Manual"
+[6]: https://www.mongodb.com/docs/manual/tutorial/equality-sort-range-guideline/?utm_source=chatgpt.com "The ESR (Equality, Sort, Range) Guideline"
+[7]: https://www.mongodb.com/docs/manual/core/text-search/on-prem/?utm_source=chatgpt.com "$text Queries - Database Manual - MongoDB Docs"
+[8]: https://www.mongodb.com/docs/manual/tutorial/analyze-query-plan/?utm_source=chatgpt.com "Interpret Explain Plan Results - Database Manual"

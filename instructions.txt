@@ -1,0 +1,364 @@
+================================================================================
+  IMDb Search System — Install and Run Instructions
+================================================================================
+
+This project uses:
+  - Python 3.11 or newer
+  - MongoDB 6.0+ on your machine (default: mongodb://localhost:27017/)
+  - Two IMDb dataset files (downloaded by script into data/)
+
+All commands below are run from the project root folder (where app.py lives).
+
+
+--------------------------------------------------------------------------------
+1. PREREQUISITES
+--------------------------------------------------------------------------------
+
+  A) Install MongoDB and start the server
+
+     The app expects MongoDB at:
+       mongodb://localhost:27017/
+
+     -------------------------------------------------------------------------
+     macOS — MongoDB via Homebrew (recommended)
+     -------------------------------------------------------------------------
+
+     Prerequisites:
+       - Homebrew installed: https://brew.sh
+       - Apple Command Line Tools (CLT) reasonably current — Homebrew may
+         refuse to install MongoDB if CLT are too old (see section 10).
+
+     Install MongoDB Community Edition:
+
+       brew tap mongodb/brew
+       brew install mongodb-community@8.0
+
+     Notes:
+       - If @8.0 is unavailable on your machine, try:
+           brew install mongodb-community
+         (no version suffix — Homebrew may map this to the current default.)
+       - The install also provides mongosh (MongoDB Shell).
+
+     Start MongoDB as a background service:
+
+       brew services start mongodb-community@8.0
+
+     If you installed mongodb-community without @8.0, use the matching name:
+
+       brew services start mongodb-community
+
+     Stop or restart when needed:
+
+       brew services stop mongodb-community@8.0
+       brew services restart mongodb-community@8.0
+
+     Verify the server responds:
+
+       mongosh --eval "db.adminCommand('ping')"
+
+     Expected output includes: { ok: 1 }
+
+     -------------------------------------------------------------------------
+     Linux (systemd)
+     -------------------------------------------------------------------------
+
+       sudo systemctl start mongod
+       sudo systemctl enable mongod    # optional: start on boot
+
+     Verify (if mongosh is installed):
+
+       mongosh --eval "db.adminCommand('ping')"
+
+     If mongosh is not installed, use your distro’s MongoDB package docs or
+     install mongosh separately from MongoDB’s download site.
+
+  B) Install Python 3.11+
+
+     Check version:
+       python3 --version
+
+     On some systems the command is "python" instead of "python3".
+
+
+--------------------------------------------------------------------------------
+2. INSTALL PYTHON DEPENDENCIES
+--------------------------------------------------------------------------------
+
+  Create a virtual environment (recommended):
+
+    python3 -m venv .venv
+    source .venv/bin/activate          # macOS / Linux
+    # On Windows CMD:    .venv\Scripts\activate.bat
+    # On Windows PowerShell:  .venv\Scripts\Activate.ps1
+
+  Install packages:
+
+    pip install -r requirements.txt
+
+
+--------------------------------------------------------------------------------
+3. DOWNLOAD IMDb DATA (TWO FILES ONLY)
+--------------------------------------------------------------------------------
+
+  This downloads only:
+    - title.basics.tsv.gz
+    - title.ratings.tsv.gz
+
+  into the data/ folder. The files are large (hundreds of MB total); use a
+  stable connection. The script skips files that already exist.
+
+    python download_data.py
+
+  If you already copied these two .gz files into data/ manually, you can
+  skip this step.
+
+
+--------------------------------------------------------------------------------
+4. IMPORT DATA INTO MONGODB
+--------------------------------------------------------------------------------
+
+  Database name : imdb_search
+  Collections   : titles_sample  (small, ~10k docs)
+                  titles_full    (larger, ~100k+ docs)
+
+  IMPORTANT: The app has TWO collections. You must import EACH one separately
+  with a different --mode flag. They are NOT filled automatically.
+
+  ── Step 4a: Import sample collection (do this first) ──
+
+    python import_data.py --mode sample --clear
+
+    What it does:
+      - Fills "titles_sample" with up to 10,000 movie documents.
+      - Applies a quality filter: movies only, must have a rating, year, and
+        at least 1,000 votes.
+      - Takes about 1–5 seconds.
+      - Use this collection for UI testing and quick searches.
+
+  ── Step 4b: Import full collection (do this for benchmarking) ──
+
+    python import_data.py --mode full --clear
+
+    What it does:
+      - Fills "titles_full" with up to 100,000 documents.
+      - Includes all title types (movies, TV series, shorts, etc.).
+      - Takes about 30–120 seconds depending on your machine.
+      - Use this collection to see index performance improvements.
+
+  ── Optional: custom record cap ──
+
+    python import_data.py --mode full --clear --limit 200000
+
+  ── How to check what's imported ──
+
+    python database.py
+
+    Shows document counts for both collections.
+
+  NOTE: titles_full will show (0) in the app until you run Step 4b.
+  NOTE: MongoDB must be running before import (see section 1).
+
+
+--------------------------------------------------------------------------------
+5. CREATE INDEXES
+--------------------------------------------------------------------------------
+
+  Run AFTER import. Indexes are only created on non-empty collections.
+  Always re-run this after importing a collection that was previously empty.
+
+    python create_indexes.py
+
+  This creates 12 indexes (8 single-field + 4 compound) on each filled
+  collection: tconst, primaryTitle, searchTitle, titleType, startYear,
+  genres (multikey), rating.averageRating, rating.numVotes, and four
+  compound combinations for combined searches.
+
+  Index only one collection if needed:
+
+    python create_indexes.py --collection sample
+    python create_indexes.py --collection full
+
+  REMINDER: If you import titles_full AFTER running create_indexes.py,
+  run it again so titles_full also gets indexed:
+
+    python create_indexes.py --collection full
+
+
+--------------------------------------------------------------------------------
+6. RUN THE WEB UI (FLASK)
+--------------------------------------------------------------------------------
+
+    python app.py
+
+  Then open: http://localhost:5000
+
+  UI layout:
+    - Horizontal filter bar at the top (all filters are optional)
+    - Results table appears below after clicking Search
+    - Collection selector shows document count next to each name
+    - A warning is shown if titles_full is empty with the fix command
+    - IMDb ID links open the title directly on imdb.com
+
+  Which collection to use:
+    - titles_sample  → fast, good for testing and demos
+    - titles_full    → needed for benchmarking and seeing index speedups
+
+  Tip: Leave any filter blank or on "Any" — only filled filters are applied.
+
+
+--------------------------------------------------------------------------------
+7. TEST DATABASE CONNECTION (OPTIONAL)
+--------------------------------------------------------------------------------
+
+    python database.py
+
+  Prints connection status and document counts for both collections.
+
+
+--------------------------------------------------------------------------------
+8. RUN THE BENCHMARK (BEFORE / AFTER INDEXES)
+--------------------------------------------------------------------------------
+
+  On the sample collection:
+
+    python benchmark.py
+
+  On the full collection (usually shows a bigger speedup):
+
+    python benchmark.py --collection full
+
+  Average each query over multiple runs:
+
+    python benchmark.py --collection full --runs 3
+
+  Output is printed to the terminal and written to:
+    docs/benchmark_results.md
+
+
+--------------------------------------------------------------------------------
+9. RESET DATABASE (OPTIONAL)
+--------------------------------------------------------------------------------
+
+  Drop both collections (you will be asked to confirm):
+
+    python reset_database.py
+
+  Skip confirmation (for scripts):
+
+    python reset_database.py --yes
+
+  Drop only custom indexes, keep documents:
+
+    python reset_database.py --indexes-only
+
+  Drop a single collection:
+
+    python reset_database.py --collection sample --yes
+    python reset_database.py --collection full --yes
+
+
+--------------------------------------------------------------------------------
+10. TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  Homebrew: "Your Command Line Tools are too outdated" (during brew install
+  mongodb-community@8.0)
+
+    Homebrew needs a newer Apple Command Line Tools (CLT) bundle than the one
+    on disk. CLT can be "installed" but still outdated.
+
+    Try in this order:
+
+      1) System Settings → General → Software Update
+         Install all updates, especially Command Line Tools / Xcode related.
+         Reboot if prompted, then run brew install again.
+
+      2) List updates from Terminal:
+           softwareupdate -l
+         If Command Line Tools updates appear, install them:
+           sudo softwareupdate -i "EXACT_NAME_FROM_THE_LIST"
+
+      3) Reinstall CLT cleanly (removes old bundle, then reinstalls):
+           sudo rm -rf /Library/Developer/CommandLineTools
+           sudo xcode-select --install
+         Complete the installer popup, then brew install again.
+
+      4) Manual download (if Software Update does not offer a new enough CLT):
+           https://developer.apple.com/download/all/
+         Sign in, download "Command Line Tools for Xcode" that matches your
+         macOS version, install the .pkg, then brew install again.
+
+    Alternative if Homebrew stays blocked: run MongoDB in Docker, or install
+    the official MongoDB Community .pkg / .tgz from mongodb.com (see MongoDB
+    docs for macOS).
+
+  mongosh: "MongoNetworkError: connect ECONNREFUSED 127.0.0.1:27017"
+
+    Nothing is listening on the default MongoDB port. Usually the database
+    server (mongod) is not running yet.
+
+    macOS (Homebrew) — start the service, then ping again:
+
+      brew services start mongodb-community@8.0
+
+    If you installed without a version suffix:
+
+      brew services start mongodb-community
+
+    Check status:
+
+      brew services list | grep -i mongo
+
+    If "brew services start" fails or MongoDB was never installed, run
+    brew install again (see section 1) and read any error output.
+
+  "Cannot connect to MongoDB" (Python app / database.py)
+    - Same as above: start mongod first, then confirm port 27017 is not
+      blocked by firewall or another process.
+
+  "Ratings file not found" / "Basics file not found"
+    - Run: python download_data.py
+    - Or place title.basics.tsv.gz and title.ratings.tsv.gz in data/
+
+  Flask or app.py not found / ImportError
+    - Activate your virtual environment, then: pip install -r requirements.txt
+
+  Import is slow
+    - Normal on first run; title.basics is large. Sample mode finishes faster.
+
+  "titles_full shows (0)" in the app
+    - You have not run the full import yet. Run:
+        python import_data.py --mode full --clear
+      Then re-index:
+        python create_indexes.py --collection full
+
+  Empty search results
+    - Check that the selected collection (titles_sample or titles_full) was
+      imported. Run: python database.py  to see document counts.
+    - Indexes are optional for correctness but needed for benchmark performance.
+
+
+--------------------------------------------------------------------------------
+11. QUICK START CHECKLIST
+--------------------------------------------------------------------------------
+
+  Minimum — UI works with titles_sample only:
+
+  [ ] MongoDB running on localhost:27017
+      (macOS Homebrew: brew services start mongodb-community@8.0)
+  [ ] python3 -m venv .venv  &&  source .venv/bin/activate
+  [ ] pip install -r requirements.txt
+  [ ] python download_data.py
+  [ ] python import_data.py --mode sample --clear    ← fills titles_sample
+  [ ] python create_indexes.py
+  [ ] python app.py   →   open http://localhost:5000
+      (pick titles_sample in the UI)
+
+  Full setup — both collections + benchmark ready:
+
+  [ ] (all steps above, then also:)
+  [ ] python import_data.py --mode full --clear      ← fills titles_full
+  [ ] python create_indexes.py --collection full
+  [ ] python benchmark.py --collection full
+
+================================================================================

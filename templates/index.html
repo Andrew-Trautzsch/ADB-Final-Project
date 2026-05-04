@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMDb Search — Local MongoDB</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+
+  <style>
+    /* ── Base ── */
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --accent:    #58a6ff;
+      --accent2:   #3fb950;
+      --text:      #c9d1d9;
+      --text-dim:  #8b949e;
+      --danger:    #f85149;
+      --star:      #e3b341;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      font-size: 0.93rem;
+    }
+
+    /* ── Navbar ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .topbar .logo-icon {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-size: 1.1rem; font-weight: 900; color: #0d1117;
+    }
+    .topbar .title-text {
+      font-size: 1.05rem; font-weight: 700; color: #e6edf3;
+    }
+    .topbar .sub-text {
+      font-size: 0.78rem; color: var(--text-dim);
+    }
+    .topbar .badge-mongo {
+      margin-left: auto;
+      background: #163b2e;
+      color: var(--accent2);
+      border: 1px solid #2d6a4f;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    /* ── Filter bar (horizontal) ── */
+    .filter-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1.5rem;
+    }
+    .filter-bar form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.55rem 0.65rem;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .filter-group label {
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .filter-group .form-control,
+    .filter-group .form-select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      font-size: 0.83rem;
+      padding: 4px 8px;
+      height: 32px;
+    }
+    .filter-group .form-control:focus,
+    .filter-group .form-select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(88,166,255,.12);
+      background: var(--surface2);
+      color: #e6edf3;
+    }
+    .filter-group .form-control::placeholder { color: #484f58; }
+    .filter-group .form-select option { background: var(--surface2); }
+
+    /* keyword wider */
+    .filter-keyword { min-width: 150px; max-width: 180px; }
+
+    /* year pair */
+    .year-pair { display: flex; gap: 4px; align-items: center; }
+    .year-pair input { width: 74px; }
+    .year-sep { color: var(--text-dim); font-size: 0.8rem; }
+
+    /* collection radio pills */
+    .collection-pills { display: flex; gap: 6px; margin-top: 2px; }
+    .collection-pills input[type=radio] { display: none; }
+    .collection-pills label {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: var(--text-dim);
+      transition: all .15s;
+      white-space: nowrap;
+      /* override the uppercase from .filter-group label */
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+    }
+    .collection-pills input[type=radio]:checked + label {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d1117;
+      font-weight: 700;
+    }
+
+    /* buttons */
+    .btn-search {
+      height: 32px;
+      background: var(--accent);
+      color: #0d1117;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      padding: 0 18px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-search:hover { background: #79c0ff; }
+
+    .btn-reset-link {
+      height: 32px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      padding: 0 14px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-reset-link:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* helper hint */
+    .filter-hint {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      padding: 0.4rem 1.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ── Main content ── */
+    .main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.5rem 1.5rem;
+    }
+
+    /* ── DB offline ── */
+    .db-offline {
+      background: #21060a;
+      border: 1px solid #6e1a1a;
+      border-radius: 8px;
+      color: var(--danger);
+      padding: 0.9rem 1.2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+      flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .stat-item .stat-val {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-item .stat-lbl {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-dim);
+    }
+    .query-toggle {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      padding: 3px 10px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .query-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+    .query-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8rem 1rem;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-bottom: 1rem;
+    }
+    .query-box pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: #484f58;
+    }
+    .empty-state i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+
+    /* ── Results table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      color: var(--text);
+    }
+    .results-table thead th {
+      background: var(--surface2);
+      color: var(--text-dim);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .results-table tbody tr {
+      border-bottom: 1px solid #21262d;
+      transition: background .12s;
+    }
+    .results-table tbody tr:last-child { border-bottom: none; }
+    .results-table tbody tr:hover { background: var(--surface2); }
+    .results-table tbody td {
+      padding: 9px 14px;
+      vertical-align: middle;
+    }
+
+    /* cell helpers */
+    .cell-num { color: #484f58; font-size: 0.78rem; }
+    .cell-title { font-weight: 600; color: #e6edf3; }
+    .cell-orig { font-size: 0.78rem; color: var(--text-dim); margin-top: 1px; }
+
+    .badge-type {
+      background: #1c2954;
+      color: #79c0ff;
+      border: 1px solid #234080;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      white-space: nowrap;
+    }
+    .badge-genre {
+      background: #162316;
+      color: var(--accent2);
+      border: 1px solid #2d5a2d;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      padding: 1px 6px;
+      margin: 1px;
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .rating-pill {
+      background: #2a2000;
+      color: var(--star);
+      font-weight: 700;
+      font-size: 0.82rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      border: 1px solid #4a3800;
+    }
+    .votes-cell { color: var(--text-dim); font-size: 0.83rem; }
+    .imdb-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.78rem;
+    }
+    .imdb-link:hover { text-decoration: underline; }
+
+    /* ── Alerts ── */
+    .alert-search-err {
+      background: #21060a;
+      border: 1px solid #6e1a1a;
+      border-radius: 8px;
+      color: var(--danger);
+      padding: 0.8rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .warn-empty-full {
+      background: #1c1a00;
+      border: 1px solid #544f00;
+      border-radius: 6px;
+      color: #e3b341;
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 100%;
+    }
+    .warn-empty-full code { background: #2a2500; padding: 1px 5px; border-radius: 3px; font-size: 0.73rem; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .filter-bar form { gap: 0.5rem; }
+      .filter-group { flex: 1 1 140px; }
+      .year-pair input { width: 68px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ Topbar ══ -->
+<div class="topbar">
+  <div class="logo-icon">DB</div>
+  <div>
+    <div class="title-text">IMDb Search &amp; Query Optimization</div>
+    <div class="sub-text">Advanced Database Systems · Local MongoDB</div>
+  </div>
+  <span class="badge-mongo"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;"></i>MongoDB</span>
+</div>
+
+<!-- ══ Horizontal filter bar ══ -->
+<div class="filter-bar">
+  <form method="POST" action="/">
+
+    <!-- Collection -->
+    <div class="filter-group">
+      <label>Collection</label>
+      <div class="collection-pills">
+        {% for col in collections %}
+          <input type="radio" name="collection" id="col_{{ col }}" value="{{ col }}"
+            {% if form.collection == col %}checked{% endif %}/>
+          <label for="col_{{ col }}">
+            {{ col }}
+            {% if db_ok %}
+              {% if col == 'titles_sample' %}({{ "{:,}".format(sample_count) }})
+              {% elif col == 'titles_full' %}({{ "{:,}".format(full_count) }}){% endif %}
+            {% endif %}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Keyword -->
+    <div class="filter-group filter-keyword">
+      <label>Keyword</label>
+      <input type="text" class="form-control" name="keyword"
+        placeholder="e.g. Batman" value="{{ form.keyword }}"/>
+    </div>
+
+    <!-- Title Type -->
+    <div class="filter-group">
+      <label>Title Type</label>
+      <select class="form-select" name="title_type">
+        <option value="" {% if form.title_type == '' %}selected{% endif %}>Any</option>
+        {% for tt in title_types %}
+        <option value="{{ tt }}" {% if form.title_type == tt %}selected{% endif %}>{{ tt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Genre -->
+    <div class="filter-group">
+      <label>Genre</label>
+      <select class="form-select" name="genre">
+        <option value="" {% if form.genre == '' %}selected{% endif %}>Any</option>
+        {% for g in genres %}
+        <option value="{{ g }}" {% if form.genre == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Year Range -->
+    <div class="filter-group">
+      <label>Year Range</label>
+      <div class="year-pair">
+        <input type="number" class="form-control" name="start_year"
+          placeholder="From" value="{{ form.start_year }}" min="1800" max="2200"/>
+        <span class="year-sep">–</span>
+        <input type="number" class="form-control" name="end_year"
+          placeholder="To" value="{{ form.end_year }}" min="1800" max="2200"/>
+      </div>
+    </div>
+
+    <!-- Min Rating -->
+    <div class="filter-group">
+      <label>Min Rating</label>
+      <input type="number" class="form-control" name="min_rating"
+        placeholder="e.g. 7.0" value="{{ form.min_rating }}" min="0" max="10" step="0.5"
+        style="width:90px;"/>
+    </div>
+
+    <!-- Min Votes -->
+    <div class="filter-group">
+      <label>Min Votes</label>
+      <input type="number" class="form-control" name="min_votes"
+        placeholder="e.g. 5000" value="{{ form.min_votes }}" min="0"
+        style="width:110px;"/>
+    </div>
+
+    <!-- Limit -->
+    <div class="filter-group">
+      <label>Limit</label>
+      <select class="form-select" name="limit" style="width:80px;">
+        {% for opt in limit_options %}
+        <option value="{{ opt }}" {% if form.limit == opt|string %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Sort -->
+    <div class="filter-group">
+      <label>Sort By</label>
+      <select class="form-select" name="sort_by" style="min-width:155px;">
+        {% for s in sort_options %}
+        <option value="{{ s }}" {% if form.sort_by == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Buttons -->
+    <div class="filter-group">
+      <label style="visibility:hidden;">Go</label>
+      <div style="display:flex; gap:6px;">
+        <button type="submit" class="btn-search">
+          <i class="bi bi-search me-1"></i>Search
+        </button>
+        <a href="/" class="btn-reset-link">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </a>
+      </div>
+    </div>
+
+  </form>
+
+  <!-- Empty full warning -->
+  {% if db_ok and full_count == 0 %}
+  <div class="warn-empty-full mt-2">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    <strong>titles_full</strong> is empty — import with
+    <code>python import_data.py --mode full --clear</code>
+  </div>
+  {% endif %}
+</div>
+
+<div class="filter-hint">
+  <i class="bi bi-info-circle"></i>
+  All filters are optional — leave any field blank or on "Any" to skip it.
+</div>
+
+<!-- ══ Main ══ -->
+<div class="main">
+
+  <!-- DB offline -->
+  {% if not db_ok %}
+  <div class="db-offline">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>Cannot connect to MongoDB</strong> at <code>mongodb://localhost:27017/</code>.
+    Start MongoDB and refresh.
+  </div>
+  {% endif %}
+
+  <!-- Search error -->
+  {% if error %}
+  <div class="alert-search-err">
+    <i class="bi bi-x-circle-fill me-2"></i>{{ error }}
+  </div>
+  {% endif %}
+
+  <!-- Stats bar -->
+  {% if count is not none %}
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-val">{{ count }}</div>
+      <div class="stat-lbl">Results</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val">{{ "%.1f"|format(query_ms) }} ms</div>
+      <div class="stat-lbl">Query time</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val">{{ form.collection }}</div>
+      <div class="stat-lbl">Collection</div>
+    </div>
+    {% if query_filter %}
+    <button class="query-toggle" data-bs-toggle="collapse" data-bs-target="#queryBox">
+      <i class="bi bi-code-slash me-1"></i>Query
+    </button>
+    {% endif %}
+  </div>
+
+  {% if query_filter %}
+  <div class="collapse" id="queryBox">
+    <div class="query-box"><pre>{{ query_filter }}</pre></div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <!-- No results yet -->
+  {% if results is none and not error %}
+  <div class="empty-state">
+    <i class="bi bi-film"></i>
+    <p>Use the filters above and click <strong>Search</strong>.</p>
+  </div>
+
+  <!-- No results found -->
+  {% elif results is not none and count == 0 %}
+  <div class="empty-state">
+    <i class="bi bi-search"></i>
+    <p>No results found. Try fewer or wider filters.</p>
+  </div>
+
+  <!-- Results table -->
+  {% elif results %}
+  <div class="table-wrap">
+    <div style="overflow-x:auto;">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Year</th>
+            <th>Runtime</th>
+            <th>Genres</th>
+            <th>Rating</th>
+            <th>Votes</th>
+            <th>IMDb</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in results %}
+          {% set rating = doc.get('rating') or {} %}
+          <tr>
+            <td class="cell-num">{{ loop.index }}</td>
+            <td>
+              <div class="cell-title">{{ doc.primaryTitle }}</div>
+              {% if doc.originalTitle and doc.originalTitle != doc.primaryTitle %}
+              <div class="cell-orig">{{ doc.originalTitle }}</div>
+              {% endif %}
+            </td>
+            <td><span class="badge-type">{{ doc.titleType or '—' }}</span></td>
+            <td>{{ doc.startYear or '—' }}</td>
+            <td>{% if doc.runtimeMinutes %}{{ doc.runtimeMinutes }} min{% else %}—{% endif %}</td>
+            <td>
+              {% if doc.genres %}
+                {% for g in doc.genres %}<span class="badge-genre">{{ g }}</span>{% endfor %}
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if rating.averageRating %}
+              <span class="rating-pill">
+                <i class="bi bi-star-fill me-1" style="font-size:.65rem;"></i>{{ "%.1f"|format(rating.averageRating) }}
+              </span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="votes-cell">
+              {% if rating.numVotes %}{{ "{:,}".format(rating.numVotes) }}{% else %}—{% endif %}
+            </td>
+            <td>
+              <a href="https://www.imdb.com/title/{{ doc.tconst }}/"
+                target="_blank" class="imdb-link">
+                {{ doc.tconst }}&nbsp;<i class="bi bi-box-arrow-up-right" style="font-size:.6rem;"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /main -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
