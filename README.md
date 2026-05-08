@@ -12,9 +12,10 @@ Demonstrates document modeling, data cleaning, indexing, query optimization, and
 | Database | Local MongoDB (`imdb_search`) |
 | Collections | `titles_sample` (10k docs) · `titles_full` (100k+ docs) |
 | Dataset | IMDb non-commercial TSV files |
-| UI | Streamlit web app |
+| UI | Flask web app |
 | Search filters | Keyword, title type, genre, year range, rating, votes |
-| Index types | Single-field, compound, multikey (array) |
+| Search modes | Regex (partial match) · $text index (fast, relevance-ranked) |
+| Index types | Single-field, compound, multikey (array), text |
 
 ---
 
@@ -80,15 +81,15 @@ Imports up to 100,000 records into `titles_full`.
 python create_indexes.py
 ```
 
-Creates all required single-field and compound indexes on both collections (only operates on non-empty ones).
+Creates all required single-field, compound, and text indexes on both collections (only operates on non-empty ones).
 
 ### 5. Run the UI
 
 ```bash
-streamlit run app.py
+python app.py
 ```
 
-Opens at `http://localhost:8501` in your browser.
+Opens at `http://localhost:5000` in your browser.
 
 ---
 
@@ -108,6 +109,18 @@ python benchmark.py --collection full --runs 3
 ```
 
 Results are printed to the terminal and saved to `docs/benchmark_results.md`.
+
+---
+
+## Text Search Comparison
+
+Compare the current `$regex` keyword search against the `$text` index directly from the UI at `http://localhost:5000/compare`, or from the command line:
+
+```bash
+python text_search_comparison.py --keyword batman --collection full --runs 3
+```
+
+Results are saved to `docs/text_search_comparison.md`.
 
 ---
 
@@ -133,11 +146,14 @@ python reset_database.py --collection sample --yes
 | `database.py` | MongoDB connection helper, collection selector |
 | `download_data.py` | Download IMDb dataset files |
 | `import_data.py` | Clean, merge, and import title + rating data |
-| `create_indexes.py` | Create single-field and compound indexes |
-| `search_service.py` | Dynamic query builder with execution timing |
-| `app.py` | Streamlit search UI |
+| `create_indexes.py` | Create single-field, compound, and text indexes |
+| `search_service.py` | Dynamic query builder with execution timing; supports regex and $text modes |
+| `text_search_comparison.py` | Side-by-side regex vs $text index performance comparison |
+| `app.py` | Flask search UI with search mode toggle and comparison page |
 | `benchmark.py` | Before/after index performance comparison |
 | `reset_database.py` | Drop collections or indexes for re-import |
+| `templates/index.html` | Main search page |
+| `templates/compare.html` | Regex vs $text comparison page |
 | `data/` | IMDb `.tsv.gz` files (not committed to git) |
 | `docs/` | Report, benchmark results, screenshots |
 
@@ -193,6 +209,12 @@ Each document represents one IMDb title with an embedded rating:
 | `(titleType, genres, startYear, rating.averageRating)` | Full combined search |
 | `(titleType, rating.numVotes)` | Popular titles by type |
 
+### Text
+
+| Index | Purpose |
+|---|---|
+| `primaryTitle` (text) | Fast whole-word keyword search with relevance scoring via `$text` |
+
 ---
 
 ## Search Filters Available
@@ -200,6 +222,7 @@ Each document represents one IMDb title with an embedded rating:
 | Filter | Description |
 |---|---|
 | Keyword | Partial, case-insensitive title search |
+| Search Mode | **Regex** — flexible partial match (e.g. "bat" finds "Batman") · **$text** — fast index lookup, whole-word, relevance-ranked |
 | Title Type | movie, tvSeries, short, tvMovie, video, etc. |
 | Genre | Action, Drama, Comedy, Horror, etc. |
 | Year Range | From/to start year |
@@ -221,13 +244,16 @@ Each document represents one IMDb title with an embedded rating:
 **Find Batman titles:**
 - Keyword: `Batman` · Sort: Rating high to low · Limit: `50`
 
+**Find Batman titles with relevance ranking:**
+- Keyword: `Batman` · Search Mode: `$text` · Sort: Rating high to low · Limit: `50`
+
 ---
 
 ## Limitations
 
 - Only `title.basics` and `title.ratings` files are used; actor/director search is not included.
-- Keyword search uses a contains-style regex which may not fully benefit from a normal index (prefix-style regex is more index-friendly).
-- Full-text search (`$text` index) is not implemented; mentioned as a future improvement.
+- Regex keyword search uses a contains-style pattern which does not benefit from a normal index (prefix-style regex is more index-friendly).
+- `$text` search matches whole words only — searching "bat" will not find "Batman".
 - Designed for local MongoDB only — not Atlas or cloud deployment.
 
 ---
@@ -235,7 +261,6 @@ Each document represents one IMDb title with an embedded rating:
 ## Future Work
 
 - Add cast/crew search using `title.principals.tsv.gz`
-- Add MongoDB text index for better keyword search performance
 - Add pagination for large result sets
 - Add charts (rating distribution, genres over time)
 - Add Atlas Search for full-text capabilities

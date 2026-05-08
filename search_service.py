@@ -31,7 +31,16 @@ SORT_OPTIONS: dict[str, list[tuple[str, int]]] = {
 DEFAULT_SORT = "Rating (high to low)"
 
 # ---------------------------------------------------------------------------
-# Valid genres (matches the plan spec)
+# Search modes
+# ---------------------------------------------------------------------------
+
+SEARCH_MODE_REGEX = "regex"
+SEARCH_MODE_TEXT  = "text"
+SEARCH_MODES      = [SEARCH_MODE_REGEX, SEARCH_MODE_TEXT]
+DEFAULT_SEARCH_MODE = SEARCH_MODE_REGEX
+
+# ---------------------------------------------------------------------------
+# Valid genres and title types
 # ---------------------------------------------------------------------------
 
 GENRES = [
@@ -45,8 +54,8 @@ TITLE_TYPES = [
     "tvMiniSeries", "tvEpisode",
 ]
 
-RESULT_LIMIT_MIN = 10
-RESULT_LIMIT_MAX = 200
+RESULT_LIMIT_MIN     = 10
+RESULT_LIMIT_MAX     = 200
 RESULT_LIMIT_DEFAULT = 50
 
 
@@ -58,14 +67,15 @@ RESULT_LIMIT_DEFAULT = 50
 class SearchParams:
     collection_name: str = COLLECTION_SAMPLE
     keyword: str = ""
-    title_type: str = ""          # empty string means "Any"
-    genre: str = ""               # empty string means "Any"
+    title_type: str = ""
+    genre: str = ""
     start_year: int | None = None
     end_year: int | None = None
     min_rating: float | None = None
     min_votes: int | None = None
     limit: int = RESULT_LIMIT_DEFAULT
     sort_by: str = DEFAULT_SORT
+    search_mode: str = DEFAULT_SEARCH_MODE   # "regex" or "text"
 
 
 @dataclass
@@ -76,6 +86,7 @@ class SearchResult:
     query_filter: dict = field(default_factory=dict)
     sort_spec: list = field(default_factory=list)
     limit_applied: int = RESULT_LIMIT_DEFAULT
+    search_mode: str = DEFAULT_SEARCH_MODE
     error: str = ""
 
 
@@ -88,7 +99,6 @@ def _clamp_limit(limit: int) -> int:
 
 
 def _validate_params(params: SearchParams) -> str:
-    """Return an error string if params are invalid, else empty string."""
     if params.min_rating is not None and not (0.0 <= params.min_rating <= 10.0):
         return "Minimum rating must be between 0 and 10."
     if params.min_votes is not None and params.min_votes < 0:
@@ -105,6 +115,8 @@ def _validate_params(params: SearchParams) -> str:
         return "Start year must not be greater than end year."
     if params.sort_by not in SORT_OPTIONS:
         return f"Unknown sort option '{params.sort_by}'."
+    if params.search_mode not in SEARCH_MODES:
+        return f"Unknown search mode '{params.search_mode}'."
     return ""
 
 
@@ -113,14 +125,23 @@ def _validate_params(params: SearchParams) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_filter(params: SearchParams) -> dict[str, Any]:
-    """Translate SearchParams into a MongoDB filter document."""
+    """
+    Translate SearchParams into a MongoDB filter document.
+
+    When search_mode is "text" and a keyword is provided, uses $text
+    instead of $regex. All other filters are identical either way.
+    """
     mongo_filter: dict[str, Any] = {}
 
-    # Keyword search on primaryTitle (case-insensitive, partial match)
+    # Keyword — either $text or $regex depending on search_mode
     if params.keyword.strip():
-        # Escape special regex chars, then wrap in a case-insensitive contains pattern
-        escaped = re.escape(params.keyword.strip())
-        mongo_filter["primaryTitle"] = {"$regex": escaped, "$options": "i"}
+        if params.search_mode == SEARCH_MODE_TEXT:
+            # $text uses the inverted text index — fast, whole-word, relevance-ranked
+            mongo_filter["$text"] = {"$search": params.keyword.strip()}
+        else:
+            # $regex — contains-style, case-insensitive, no index benefit for mid-string
+            escaped = re.escape(params.keyword.strip())
+            mongo_filter["primaryTitle"] = {"$regex": escaped, "$options": "i"}
 
     # Title type equality
     if params.title_type:
@@ -139,7 +160,7 @@ def _build_filter(params: SearchParams) -> dict[str, Any]:
     if year_clause:
         mongo_filter["startYear"] = year_clause
 
-    # Minimum rating (treat 0 as "no minimum" if it ever slips through)
+    # Minimum rating
     if params.min_rating is not None and params.min_rating > 0:
         mongo_filter["rating.averageRating"] = {"$gte": params.min_rating}
 
@@ -158,40 +179,47 @@ def search(params: SearchParams) -> SearchResult:
     """
     Execute a search against MongoDB and return a SearchResult.
 
-    Always applies a result limit (10–200) so the full collection is
-    never accidentally returned.
+    When search_mode="text", results with a keyword are sorted by
+    relevance score first, then by the user's chosen sort as a
+    secondary tiebreaker. When there is no keyword, mode makes no
+    difference and the user's sort applies normally.
     """
     result = SearchResult()
 
-    # Validate
     error = _validate_params(params)
     if error:
         result.error = error
         return result
 
-    safe_limit = _clamp_limit(params.limit)
-    sort_spec = SORT_OPTIONS[params.sort_by]
+    safe_limit  = _clamp_limit(params.limit)
+    sort_spec   = SORT_OPTIONS[params.sort_by]
     mongo_filter = _build_filter(params)
 
-    result.query_filter = mongo_filter
-    result.sort_spec = sort_spec
+    # For $text with a keyword, prepend relevance score to the sort
+    # so the most relevant titles float to the top first.
+    if params.search_mode == SEARCH_MODE_TEXT and params.keyword.strip():
+        text_sort  = [("score", {"$meta": "textScore"})]
+        sort_spec  = text_sort + sort_spec
+        projection = {"score": {"$meta": "textScore"}}
+    else:
+        projection = None
+
+    result.query_filter  = mongo_filter
+    result.sort_spec     = sort_spec
     result.limit_applied = safe_limit
+    result.search_mode   = params.search_mode
 
     try:
         collection = get_collection(params.collection_name)
 
         t0 = time.perf_counter()
-        cursor = (
-            collection.find(mongo_filter)
-            .sort(sort_spec)
-            .limit(safe_limit)
-        )
+        cursor = collection.find(mongo_filter, projection).sort(sort_spec).limit(safe_limit)
         docs = list(cursor)
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
         result.documents = docs
-        result.count = len(docs)
-        result.query_ms = round(elapsed_ms, 2)
+        result.count     = len(docs)
+        result.query_ms  = round(elapsed_ms, 2)
 
     except Exception as exc:
         result.error = str(exc)
@@ -206,22 +234,18 @@ def search(params: SearchParams) -> SearchResult:
 def build_summary(params: SearchParams, result: SearchResult) -> dict:
     """
     Build a compact, token-efficient summary of search results for LLM context.
-
-    Instead of sending all documents (~20k tokens for 200 results), this produces
-    a ~200-token dict with: applied filters, aggregate stats, and the top 10 results.
-    The LLM can call the search_movies tool for anything outside this window.
     """
     top_docs = []
     for doc in result.documents[:10]:
         rating = doc.get("rating") or {}
         top_docs.append({
-            "title": doc.get("primaryTitle"),
-            "year": doc.get("startYear"),
-            "type": doc.get("titleType"),
-            "genres": doc.get("genres") or [],
-            "rating": rating.get("averageRating"),
-            "votes": rating.get("numVotes"),
-            "tconst": doc.get("tconst"),
+            "title":   doc.get("primaryTitle"),
+            "year":    doc.get("startYear"),
+            "type":    doc.get("titleType"),
+            "genres":  doc.get("genres") or [],
+            "rating":  rating.get("averageRating"),
+            "votes":   rating.get("numVotes"),
+            "tconst":  doc.get("tconst"),
         })
 
     genre_counts: Counter = Counter()
@@ -253,15 +277,16 @@ def build_summary(params: SearchParams, result: SearchResult) -> dict:
         filters["min_votes"] = params.min_votes
 
     return {
-        "total_results": result.count,
-        "limit_applied": result.limit_applied,
-        "query_ms": result.query_ms,
-        "collection": params.collection_name,
-        "sort_by": params.sort_by,
-        "filters_applied": filters,
-        "top_10_results": top_docs,
-        "genre_distribution": dict(genre_counts.most_common(5)),
-        "average_rating_in_results": avg_rating,
+        "total_results":              result.count,
+        "limit_applied":              result.limit_applied,
+        "query_ms":                   result.query_ms,
+        "collection":                 params.collection_name,
+        "sort_by":                    params.sort_by,
+        "search_mode":                params.search_mode,
+        "filters_applied":            filters,
+        "top_10_results":             top_docs,
+        "genre_distribution":         dict(genre_counts.most_common(5)),
+        "average_rating_in_results":  avg_rating,
     }
 
 
@@ -270,22 +295,24 @@ def build_summary(params: SearchParams, result: SearchResult) -> dict:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    params = SearchParams(
-        keyword="Batman",
-        title_type="movie",
-        min_rating=6.0,
-        limit=10,
-        sort_by="Rating (high to low)",
-    )
-    res = search(params)
-    if res.error:
-        print(f"Error: {res.error}")
-    else:
-        print(f"Found {res.count} results in {res.query_ms} ms")
-        for doc in res.documents:
-            rating = doc.get("rating", {})
-            print(
-                f"  {doc.get('primaryTitle')} "
-                f"({doc.get('startYear')}) "
-                f"— rating: {rating.get('averageRating')}"
-            )
+    for mode in ("regex", "text"):
+        params = SearchParams(
+            keyword="Batman",
+            title_type="movie",
+            min_rating=6.0,
+            limit=5,
+            sort_by="Rating (high to low)",
+            search_mode=mode,
+        )
+        res = search(params)
+        if res.error:
+            print(f"[{mode}] Error: {res.error}")
+        else:
+            print(f"\n[{mode}] Found {res.count} results in {res.query_ms} ms")
+            for doc in res.documents:
+                rating = doc.get("rating", {})
+                print(
+                    f"  {doc.get('primaryTitle')} "
+                    f"({doc.get('startYear')}) "
+                    f"— rating: {rating.get('averageRating')}"
+                )

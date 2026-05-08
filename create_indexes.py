@@ -13,7 +13,7 @@ Usage:
 import argparse
 import sys
 
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, TEXT
 from pymongo.collection import Collection
 
 from database import (
@@ -27,39 +27,21 @@ from database import (
 # Index definitions
 # ---------------------------------------------------------------------------
 
-# Single-field indexes: list of (field, direction) tuples.
 SINGLE_FIELD_INDEXES = [
     ("tconst", ASCENDING),
     ("primaryTitle", ASCENDING),
     ("searchTitle", ASCENDING),
     ("titleType", ASCENDING),
     ("startYear", ASCENDING),
-    ("genres", ASCENDING),           # multikey index (array field)
+    ("genres", ASCENDING),
     ("rating.averageRating", DESCENDING),
     ("rating.numVotes", DESCENDING),
 ]
 
-# Compound indexes: list of lists of (field, direction) pairs.
 COMPOUND_INDEXES = [
-    # Filtering movies by year range
     [("titleType", ASCENDING), ("startYear", ASCENDING)],
-
-    # Genre + year range, then sorted/filtered by rating
-    [
-        ("genres", ASCENDING),
-        ("startYear", ASCENDING),
-        ("rating.averageRating", DESCENDING),
-    ],
-
-    # Full combined search: type + genre + year + rating (ESR order)
-    [
-        ("titleType", ASCENDING),
-        ("genres", ASCENDING),
-        ("startYear", ASCENDING),
-        ("rating.averageRating", DESCENDING),
-    ],
-
-    # Votes-based queries
+    [("genres", ASCENDING), ("startYear", ASCENDING), ("rating.averageRating", DESCENDING)],
+    [("titleType", ASCENDING), ("genres", ASCENDING), ("startYear", ASCENDING), ("rating.averageRating", DESCENDING)],
     [("titleType", ASCENDING), ("rating.numVotes", DESCENDING)],
 ]
 
@@ -69,10 +51,14 @@ COMPOUND_INDEXES = [
 # ---------------------------------------------------------------------------
 
 def _index_key_str(key_list: list) -> str:
-    """Human-readable representation of a compound key list."""
     parts = []
     for field, direction in key_list:
-        arrow = "▲" if direction == ASCENDING else "▼"
+        if direction == TEXT:
+            arrow = "T"
+        elif direction == ASCENDING:
+            arrow = "▲"
+        else:
+            arrow = "▼"
         parts.append(f"{field} {arrow}")
     return " | ".join(parts)
 
@@ -84,22 +70,21 @@ def create_indexes_on(collection: Collection) -> None:
     created = 0
     skipped = 0
 
-    # Single-field
+    # Single-field indexes
     for field, direction in SINGLE_FIELD_INDEXES:
         key = [(field, direction)]
         try:
-            result = collection.create_index(key)
+            collection.create_index(key)
             print(f"  [OK] Single  : {field}")
             created += 1
         except Exception as exc:
-            # Index already exists with the same spec — safe to ignore
             if "already exists" in str(exc).lower() or "IndexOptionsConflict" in str(exc):
                 print(f"  [--] Single  : {field}  (already exists)")
                 skipped += 1
             else:
                 print(f"  [ERR] Single : {field}  — {exc}", file=sys.stderr)
 
-    # Compound
+    # Compound indexes
     for key_list in COMPOUND_INDEXES:
         try:
             collection.create_index(key_list)
@@ -111,6 +96,20 @@ def create_indexes_on(collection: Collection) -> None:
                 skipped += 1
             else:
                 print(f"  [ERR] Compound: {_index_key_str(key_list)}  — {exc}", file=sys.stderr)
+
+    # $text index on primaryTitle
+    # MongoDB allows only one text index per collection.
+    # This enables fast $text keyword search as an alternative to $regex.
+    try:
+        collection.create_index([("primaryTitle", TEXT)], name="primaryTitle_text")
+        print(f"  [OK] Text    : primaryTitle  (enables $text keyword search)")
+        created += 1
+    except Exception as exc:
+        if "already exists" in str(exc).lower() or "IndexOptionsConflict" in str(exc):
+            print(f"  [--] Text    : primaryTitle  (already exists)")
+            skipped += 1
+        else:
+            print(f"  [ERR] Text   : primaryTitle  — {exc}", file=sys.stderr)
 
     print(f"\n[indexes] Done for '{name}': {created} created, {skipped} already existed.")
 

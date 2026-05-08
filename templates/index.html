@@ -9,7 +9,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
 
   <style>
-    /* ── Base ── */
     :root {
       --bg:        #0d1117;
       --surface:   #161b22;
@@ -21,6 +20,7 @@
       --text-dim:  #8b949e;
       --danger:    #f85149;
       --star:      #e3b341;
+      --orange:    #f0883e;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -33,7 +33,7 @@
       font-size: 0.93rem;
     }
 
-    /* ── Navbar ── */
+    /* ── Topbar ── */
     .topbar {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -49,24 +49,35 @@
       display: grid; place-items: center;
       font-size: 1.1rem; font-weight: 900; color: #0d1117;
     }
-    .topbar .title-text {
-      font-size: 1.05rem; font-weight: 700; color: #e6edf3;
-    }
-    .topbar .sub-text {
-      font-size: 0.78rem; color: var(--text-dim);
-    }
+    .topbar .title-text { font-size: 1.05rem; font-weight: 700; color: #e6edf3; }
+    .topbar .sub-text   { font-size: 0.78rem; color: var(--text-dim); }
     .topbar .badge-mongo {
       margin-left: auto;
-      background: #163b2e;
-      color: var(--accent2);
-      border: 1px solid #2d6a4f;
-      border-radius: 20px;
-      padding: 3px 10px;
-      font-size: 0.72rem;
-      font-weight: 600;
+      background: #163b2e; color: var(--accent2);
+      border: 1px solid #2d6a4f; border-radius: 20px;
+      padding: 3px 10px; font-size: 0.72rem; font-weight: 600;
     }
 
-    /* ── Filter bar (horizontal) ── */
+    /* ── Nav tabs ── */
+    .nav-tabs-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 0;
+    }
+    .nav-tab {
+      padding: 0.65rem 1.1rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .nav-tab:hover { color: var(--text); }
+    .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* ── Filter bar ── */
     .filter-bar {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -111,15 +122,50 @@
     .filter-group .form-control::placeholder { color: #484f58; }
     .filter-group .form-select option { background: var(--surface2); }
 
-    /* keyword wider */
     .filter-keyword { min-width: 150px; max-width: 180px; }
 
-    /* year pair */
     .year-pair { display: flex; gap: 4px; align-items: center; }
     .year-pair input { width: 74px; }
     .year-sep { color: var(--text-dim); font-size: 0.8rem; }
 
-    /* collection radio pills */
+    /* ── Radio pills (collection + search mode share this style) ── */
+    .radio-pills { display: flex; gap: 6px; margin-top: 2px; }
+    .radio-pills input[type=radio] { display: none; }
+    .radio-pills label {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: var(--text-dim);
+      transition: all .15s;
+      white-space: nowrap;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 400;
+    }
+    .radio-pills input[type=radio]:checked + label {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d1117;
+      font-weight: 700;
+    }
+
+    /* Search mode pills use orange for $text so it's visually distinct */
+    .mode-pills input[type=radio]:checked + label {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d1117;
+      font-weight: 700;
+    }
+    .mode-pills input[value=text]:checked + label {
+      background: var(--accent2);
+      border-color: var(--accent2);
+      color: #0d1117;
+    }
+
+    /* keep old name working for collection pills */
     .collection-pills { display: flex; gap: 6px; margin-top: 2px; }
     .collection-pills input[type=radio] { display: none; }
     .collection-pills label {
@@ -132,7 +178,6 @@
       color: var(--text-dim);
       transition: all .15s;
       white-space: nowrap;
-      /* override the uppercase from .filter-group label */
       text-transform: none;
       letter-spacing: normal;
       font-weight: 400;
@@ -144,7 +189,6 @@
       font-weight: 700;
     }
 
-    /* buttons */
     .btn-search {
       height: 32px;
       background: var(--accent);
@@ -176,7 +220,6 @@
     }
     .btn-reset-link:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* helper hint */
     .filter-hint {
       font-size: 0.72rem;
       color: var(--text-dim);
@@ -186,21 +229,31 @@
       gap: 5px;
     }
 
-    /* ── Main content ── */
-    .main {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 1.5rem 1.5rem;
+    /* ── Main ── */
+    .main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 1.5rem; }
+
+    .db-offline {
+      background: #21060a; border: 1px solid #6e1a1a;
+      border-radius: 8px; color: var(--danger);
+      padding: 0.9rem 1.2rem; margin-bottom: 1.5rem;
     }
 
-    /* ── DB offline ── */
-    .db-offline {
-      background: #21060a;
-      border: 1px solid #6e1a1a;
-      border-radius: 8px;
-      color: var(--danger);
-      padding: 0.9rem 1.2rem;
-      margin-bottom: 1.5rem;
+    /* ── Search mode badge shown in stats bar ── */
+    .mode-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      border-radius: 20px;
+      padding: 2px 10px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .mode-badge.regex {
+      background: #1c1a00; color: var(--orange);
+      border-color: #544f00;
+    }
+    .mode-badge.text {
+      background: #0d2a0d; color: var(--accent2);
+      border-color: #2d5a2d;
     }
 
     /* ── Stats bar ── */
@@ -215,17 +268,9 @@
       padding: 0.75rem 1.25rem;
       margin-bottom: 1.25rem;
     }
-    .stat-item .stat-val {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: var(--accent);
-    }
-    .stat-item .stat-lbl {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--text-dim);
-    }
+    .stat-item .stat-val { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+    .stat-item .stat-lbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
+
     .query-toggle {
       margin-left: auto;
       background: transparent;
@@ -239,152 +284,85 @@
     .query-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
     .query-box {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.8rem 1rem;
-      font-size: 0.78rem;
-      color: var(--text-dim);
-      margin-bottom: 1rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.8rem 1rem;
+      font-size: 0.78rem; color: var(--text-dim); margin-bottom: 1rem;
     }
     .query-box pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
 
-    /* ── Empty state ── */
-    .empty-state {
-      text-align: center;
-      padding: 4rem 1rem;
-      color: #484f58;
-    }
+    .empty-state { text-align: center; padding: 4rem 1rem; color: #484f58; }
     .empty-state i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
 
     /* ── Results table ── */
     .table-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
     }
-    .results-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.88rem;
-      color: var(--text);
-    }
+    .results-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; color: var(--text); }
     .results-table thead th {
-      background: var(--surface2);
-      color: var(--text-dim);
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .07em;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
+      background: var(--surface2); color: var(--text-dim);
+      font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .07em;
+      padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap;
     }
-    .results-table tbody tr {
-      border-bottom: 1px solid #21262d;
-      transition: background .12s;
-    }
+    .results-table tbody tr { border-bottom: 1px solid #21262d; transition: background .12s; }
     .results-table tbody tr:last-child { border-bottom: none; }
     .results-table tbody tr:hover { background: var(--surface2); }
-    .results-table tbody td {
-      padding: 9px 14px;
-      vertical-align: middle;
-    }
+    .results-table tbody td { padding: 9px 14px; vertical-align: middle; }
 
-    /* cell helpers */
-    .cell-num { color: #484f58; font-size: 0.78rem; }
+    .cell-num  { color: #484f58; font-size: 0.78rem; }
     .cell-title { font-weight: 600; color: #e6edf3; }
     .cell-orig { font-size: 0.78rem; color: var(--text-dim); margin-top: 1px; }
 
     .badge-type {
-      background: #1c2954;
-      color: #79c0ff;
-      border: 1px solid #234080;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      padding: 2px 7px;
-      white-space: nowrap;
+      background: #1c2954; color: #79c0ff;
+      border: 1px solid #234080; border-radius: 4px;
+      font-size: 0.7rem; padding: 2px 7px; white-space: nowrap;
     }
     .badge-genre {
-      background: #162316;
-      color: var(--accent2);
-      border: 1px solid #2d5a2d;
-      border-radius: 4px;
-      font-size: 0.68rem;
-      padding: 1px 6px;
-      margin: 1px;
-      display: inline-block;
-      white-space: nowrap;
+      background: #162316; color: var(--accent2);
+      border: 1px solid #2d5a2d; border-radius: 4px;
+      font-size: 0.68rem; padding: 1px 6px; margin: 1px;
+      display: inline-block; white-space: nowrap;
     }
     .rating-pill {
-      background: #2a2000;
-      color: var(--star);
-      font-weight: 700;
-      font-size: 0.82rem;
-      padding: 2px 8px;
-      border-radius: 20px;
-      white-space: nowrap;
-      border: 1px solid #4a3800;
+      background: #2a2000; color: var(--star);
+      font-weight: 700; font-size: 0.82rem;
+      padding: 2px 8px; border-radius: 20px;
+      white-space: nowrap; border: 1px solid #4a3800;
     }
-    .votes-cell { color: var(--text-dim); font-size: 0.83rem; }
-    .imdb-link {
-      color: var(--accent);
-      text-decoration: none;
-      font-size: 0.78rem;
-    }
+    .votes-cell  { color: var(--text-dim); font-size: 0.83rem; }
+    .imdb-link   { color: var(--accent); text-decoration: none; font-size: 0.78rem; }
     .imdb-link:hover { text-decoration: underline; }
 
-    /* ── Alerts ── */
     .alert-search-err {
-      background: #21060a;
-      border: 1px solid #6e1a1a;
-      border-radius: 8px;
-      color: var(--danger);
-      padding: 0.8rem 1.1rem;
-      margin-bottom: 1rem;
+      background: #21060a; border: 1px solid #6e1a1a;
+      border-radius: 8px; color: var(--danger);
+      padding: 0.8rem 1.1rem; margin-bottom: 1rem;
     }
     .warn-empty-full {
-      background: #1c1a00;
-      border: 1px solid #544f00;
-      border-radius: 6px;
-      color: #e3b341;
-      padding: 5px 10px;
-      font-size: 0.75rem;
-      margin-top: 6px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      max-width: 100%;
+      background: #1c1a00; border: 1px solid #544f00;
+      border-radius: 6px; color: #e3b341;
+      padding: 5px 10px; font-size: 0.75rem; margin-top: 6px;
+      display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
     }
     .warn-empty-full code { background: #2a2500; padding: 1px 5px; border-radius: 3px; font-size: 0.73rem; }
 
-    /* ── Responsive ── */
     @media (max-width: 768px) {
       .filter-bar form { gap: 0.5rem; }
       .filter-group { flex: 1 1 140px; }
       .year-pair input { width: 68px; }
     }
 
-    /* ── Chat Panel ── */
+    /* ── Chat ── */
     .chat-fab {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      background: var(--accent);
-      color: #0d1117;
-      border: none;
-      border-radius: 50px;
-      padding: 0.55rem 1.1rem;
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: var(--accent); color: #0d1117;
+      border: none; border-radius: 50px;
+      padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
       box-shadow: 0 4px 20px rgba(88,166,255,.35);
-      transition: background .15s, transform .15s;
-      z-index: 999;
+      transition: background .15s, transform .15s; z-index: 999;
     }
     .chat-fab:hover { background: #79c0ff; transform: translateY(-1px); }
     .chat-fab.pulse { animation: fab-pulse 2s infinite; }
@@ -394,192 +372,107 @@
     }
 
     .chat-panel {
-      position: fixed;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 400px;
-      max-width: 100vw;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      z-index: 1000;
-      transform: translateX(100%);
+      position: fixed; right: 0; top: 0; bottom: 0;
+      width: 400px; max-width: 100vw;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 1000; transform: translateX(100%);
       transition: transform .25s cubic-bezier(.4,0,.2,1);
     }
     .chat-panel.open { transform: translateX(0); }
 
     .chat-header {
-      padding: 0.9rem 1.1rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      flex-shrink: 0;
-      background: var(--surface2);
+      padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.6rem;
+      flex-shrink: 0; background: var(--surface2);
     }
-    .chat-header .chat-title {
-      font-weight: 700;
-      color: #e6edf3;
-      font-size: 0.93rem;
-    }
-    .chat-header .chat-subtitle {
-      font-size: 0.72rem;
-      color: var(--text-dim);
-      margin-top: 1px;
-    }
+    .chat-header .chat-title   { font-weight: 700; color: #e6edf3; font-size: 0.93rem; }
+    .chat-header .chat-subtitle { font-size: 0.72rem; color: var(--text-dim); margin-top: 1px; }
     .chat-close {
-      margin-left: auto;
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-dim);
-      width: 28px;
-      height: 28px;
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-      font-size: 0.85rem;
-      flex-shrink: 0;
+      margin-left: auto; background: transparent;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-dim); width: 28px; height: 28px;
+      display: grid; place-items: center; cursor: pointer;
+      font-size: 0.85rem; flex-shrink: 0;
     }
     .chat-close:hover { border-color: var(--danger); color: var(--danger); }
 
     .chat-context-banner {
-      padding: 0.55rem 1rem;
-      background: #0d2137;
+      padding: 0.55rem 1rem; background: #0d2137;
       border-bottom: 1px solid #1a3a5c;
-      font-size: 0.73rem;
-      color: #58a6ff;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
+      font-size: 0.73rem; color: #58a6ff;
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
     }
 
     .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+      flex: 1; overflow-y: auto; padding: 1rem;
+      display: flex; flex-direction: column; gap: 0.75rem;
     }
     .chat-messages::-webkit-scrollbar { width: 5px; }
     .chat-messages::-webkit-scrollbar-track { background: transparent; }
     .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     .chat-bubble {
-      max-width: 88%;
-      padding: 0.6rem 0.85rem;
-      border-radius: 12px;
-      font-size: 0.86rem;
-      line-height: 1.5;
-      word-break: break-word;
+      max-width: 88%; padding: 0.6rem 0.85rem;
+      border-radius: 12px; font-size: 0.86rem;
+      line-height: 1.5; word-break: break-word;
     }
     .chat-bubble.user {
-      background: var(--accent);
-      color: #0d1117;
-      align-self: flex-end;
-      border-bottom-right-radius: 3px;
+      background: var(--accent); color: #0d1117;
+      align-self: flex-end; border-bottom-right-radius: 3px;
     }
     .chat-bubble.assistant {
-      background: var(--surface2);
-      color: var(--text);
-      align-self: flex-start;
-      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text);
+      align-self: flex-start; border: 1px solid var(--border);
       border-bottom-left-radius: 3px;
     }
     .chat-bubble.error {
-      background: #21060a;
-      border: 1px solid #6e1a1a;
-      color: var(--danger);
-      align-self: flex-start;
+      background: #21060a; border: 1px solid #6e1a1a;
+      color: var(--danger); align-self: flex-start;
     }
     .chat-bubble.thinking {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-      align-self: flex-start;
-      font-style: italic;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text-dim); align-self: flex-start; font-style: italic;
     }
     .typing-dots span {
-      display: inline-block;
-      width: 6px; height: 6px;
-      background: var(--text-dim);
-      border-radius: 50%;
-      margin: 0 2px;
-      animation: blink 1.2s infinite;
+      display: inline-block; width: 6px; height: 6px;
+      background: var(--text-dim); border-radius: 50%;
+      margin: 0 2px; animation: blink 1.2s infinite;
     }
     .typing-dots span:nth-child(2) { animation-delay: .2s; }
     .typing-dots span:nth-child(3) { animation-delay: .4s; }
-    @keyframes blink {
-      0%, 80%, 100% { opacity: .2; }
-      40%            { opacity: 1; }
-    }
+    @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
 
     .chat-footer {
-      padding: 0.75rem;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 0.5rem;
-      flex-shrink: 0;
-      background: var(--surface2);
+      padding: 0.75rem; border-top: 1px solid var(--border);
+      display: flex; gap: 0.5rem; flex-shrink: 0; background: var(--surface2);
     }
     .chat-input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.86rem;
-      padding: 0.5rem 0.75rem;
-      resize: none;
-      min-height: 40px;
-      max-height: 120px;
-      font-family: inherit;
-      line-height: 1.4;
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.86rem;
+      padding: 0.5rem 0.75rem; resize: none;
+      min-height: 40px; max-height: 120px; font-family: inherit; line-height: 1.4;
     }
-    .chat-input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(88,166,255,.12);
-    }
+    .chat-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.12); }
     .chat-input::placeholder { color: #484f58; }
     .chat-send {
-      background: var(--accent);
-      border: none;
-      border-radius: 8px;
-      color: #0d1117;
-      width: 40px;
-      flex-shrink: 0;
-      cursor: pointer;
-      font-size: 1rem;
-      display: grid;
-      place-items: center;
-      transition: background .15s;
+      background: var(--accent); border: none; border-radius: 8px;
+      color: #0d1117; width: 40px; flex-shrink: 0; cursor: pointer;
+      font-size: 1rem; display: grid; place-items: center; transition: background .15s;
     }
     .chat-send:hover { background: #79c0ff; }
     .chat-send:disabled { background: #30363d; color: #484f58; cursor: not-allowed; }
 
     .chat-no-key {
-      padding: 1.5rem;
-      text-align: center;
-      color: var(--text-dim);
-      font-size: 0.82rem;
-      line-height: 1.6;
+      padding: 1.5rem; text-align: center;
+      color: var(--text-dim); font-size: 0.82rem; line-height: 1.6;
     }
     .chat-no-key code {
-      background: var(--surface2);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.78rem;
-      color: var(--accent);
+      background: var(--surface2); padding: 2px 6px;
+      border-radius: 4px; font-size: 0.78rem; color: var(--accent);
     }
 
-    @media (max-width: 480px) {
-      .chat-panel { width: 100vw; }
-    }
+    @media (max-width: 480px) { .chat-panel { width: 100vw; } }
   </style>
 </head>
 <body>
@@ -594,7 +487,13 @@
   <span class="badge-mongo"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;"></i>MongoDB</span>
 </div>
 
-<!-- ══ Horizontal filter bar ══ -->
+<!-- ══ Nav tabs ══ -->
+<div class="nav-tabs-bar">
+  <a href="/"        class="nav-tab active"><i class="bi bi-search me-1"></i>Search</a>
+  <a href="/compare" class="nav-tab"><i class="bi bi-layout-split me-1"></i>Search Comparison</a>
+</div>
+
+<!-- ══ Filter bar ══ -->
 <div class="filter-bar">
   <form method="POST" action="/">
 
@@ -621,6 +520,23 @@
       <label>Keyword</label>
       <input type="text" class="form-control" name="keyword"
         placeholder="e.g. Batman" value="{{ form.keyword }}"/>
+    </div>
+
+    <!-- Search Mode -->
+    <div class="filter-group">
+      <label>Search Mode</label>
+      <div class="radio-pills mode-pills">
+        <input type="radio" name="search_mode" id="mode_regex" value="regex"
+          {% if form.search_mode == 'regex' %}checked{% endif %}/>
+        <label for="mode_regex" title="Contains-style match — flexible but slower">
+          <i class="bi bi-slash-circle me-1"></i>Regex
+        </label>
+        <input type="radio" name="search_mode" id="mode_text" value="text"
+          {% if form.search_mode == 'text' %}checked{% endif %}/>
+        <label for="mode_text" title="Inverted index — fast, whole-word, relevance-ranked">
+          <i class="bi bi-lightning-charge me-1"></i>$text
+        </label>
+      </div>
     </div>
 
     <!-- Title Type -->
@@ -708,7 +624,6 @@
 
   </form>
 
-  <!-- Empty full warning -->
   {% if db_ok and full_count == 0 %}
   <div class="warn-empty-full mt-2">
     <i class="bi bi-exclamation-triangle me-1"></i>
@@ -721,12 +636,16 @@
 <div class="filter-hint">
   <i class="bi bi-info-circle"></i>
   All filters are optional — leave any field blank or on "Any" to skip it.
+  &nbsp;·&nbsp;
+  <i class="bi bi-lightning-charge" style="color:var(--accent2);"></i>
+  <strong style="color:var(--accent2);">$text</strong> mode is faster but matches whole words only.
+  <i class="bi bi-slash-circle ms-2" style="color:var(--orange);"></i>
+  <strong style="color:var(--orange);">Regex</strong> supports partial matches like "bat" → Batman.
 </div>
 
 <!-- ══ Main ══ -->
 <div class="main">
 
-  <!-- DB offline -->
   {% if not db_ok %}
   <div class="db-offline">
     <i class="bi bi-exclamation-triangle-fill me-2"></i>
@@ -735,14 +654,12 @@
   </div>
   {% endif %}
 
-  <!-- Search error -->
   {% if error %}
   <div class="alert-search-err">
     <i class="bi bi-x-circle-fill me-2"></i>{{ error }}
   </div>
   {% endif %}
 
-  <!-- Stats bar -->
   {% if count is not none %}
   <div class="stats-bar">
     <div class="stat-item">
@@ -757,13 +674,22 @@
       <div class="stat-val">{{ form.collection }}</div>
       <div class="stat-lbl">Collection</div>
     </div>
+    <!-- Search mode badge -->
+    <div class="stat-item">
+      {% if form.search_mode == 'text' %}
+      <span class="mode-badge text"><i class="bi bi-lightning-charge me-1"></i>$text index</span>
+      {% else %}
+      <span class="mode-badge regex"><i class="bi bi-slash-circle me-1"></i>Regex</span>
+      {% endif %}
+      <div class="stat-lbl" style="margin-top:3px;">Search mode</div>
+    </div>
     {% if query_filter %}
     <button class="query-toggle" data-bs-toggle="collapse" data-bs-target="#queryBox">
       <i class="bi bi-code-slash me-1"></i>Query
     </button>
     {% endif %}
     {% if query_summary %}
-    <button class="query-toggle ms-1" id="chatOpenBtn" onclick="openChat()" style="color:var(--accent);border-color:var(--accent);">
+    <button class="query-toggle ms-1" onclick="openChat()" style="color:var(--accent);border-color:var(--accent);">
       <i class="bi bi-chat-dots me-1"></i>Chat
     </button>
     {% endif %}
@@ -776,21 +702,25 @@
   {% endif %}
   {% endif %}
 
-  <!-- No results yet -->
   {% if results is none and not error %}
   <div class="empty-state">
     <i class="bi bi-film"></i>
     <p>Use the filters above and click <strong>Search</strong>.</p>
   </div>
 
-  <!-- No results found -->
   {% elif results is not none and count == 0 %}
   <div class="empty-state">
     <i class="bi bi-search"></i>
     <p>No results found. Try fewer or wider filters.</p>
+    {% if form.search_mode == 'text' and form.keyword %}
+    <p style="font-size:0.82rem; color:var(--text-dim);">
+      <i class="bi bi-info-circle me-1"></i>
+      <strong>$text</strong> matches whole words only — try switching to
+      <strong>Regex</strong> mode for partial matches.
+    </p>
+    {% endif %}
   </div>
 
-  <!-- Results table -->
   {% elif results %}
   <div class="table-wrap">
     <div style="overflow-x:auto;">
@@ -851,30 +781,25 @@
   </div>
   {% endif %}
 
-</div><!-- /main -->
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 {% if query_summary %}
-<!-- Embed compact summary as JS — only top 10 results + stats, NOT all documents -->
 <script>
   window.QUERY_SUMMARY = {{ query_summary | tojson }};
 </script>
 {% endif %}
 
-<!-- ══ Chat FAB (floating action button) ══ -->
 {% if query_summary %}
 <button class="chat-fab pulse" onclick="openChat()" title="Ask Movie Buddy">
   <i class="bi bi-chat-dots"></i> Ask Movie Buddy
 </button>
 {% endif %}
 
-<!-- ══ Chat Panel ══ -->
 <div class="chat-panel" id="chatPanel">
   <div class="chat-header">
-    <div>
-      <i class="bi bi-robot" style="color:var(--accent);font-size:1rem;"></i>
-    </div>
+    <div><i class="bi bi-robot" style="color:var(--accent);font-size:1rem;"></i></div>
     <div>
       <div class="chat-title">🎬 Movie Buddy</div>
       <div class="chat-subtitle">Your personal film-obsessed friend · gemini-2.5-flash</div>
@@ -925,13 +850,9 @@
 
   {% if gemini_configured %}
   <div class="chat-footer">
-    <textarea
-      class="chat-input"
-      id="chatInput"
-      placeholder="What are you in the mood for?"
-      rows="1"
-      onkeydown="handleChatKey(event)"
-    ></textarea>
+    <textarea class="chat-input" id="chatInput"
+      placeholder="What are you in the mood for?" rows="1"
+      onkeydown="handleChatKey(event)"></textarea>
     <button class="chat-send" id="chatSend" onclick="sendMessage()" title="Send">
       <i class="bi bi-send"></i>
     </button>
@@ -940,34 +861,23 @@
 </div>
 
 <script>
-  // ---------------------------------------------------------------------------
-  // Chat state
-  // ---------------------------------------------------------------------------
-  const conversationHistory = [];   // [{role, content}, ...] — no system msg here
+  const conversationHistory = [];
   let chatBusy = false;
 
-  // ---------------------------------------------------------------------------
-  // Panel open / close
-  // ---------------------------------------------------------------------------
   function openChat() {
     document.getElementById('chatPanel').classList.add('open');
     const fab = document.querySelector('.chat-fab');
     if (fab) { fab.classList.remove('pulse'); fab.style.display = 'none'; }
     setTimeout(() => document.getElementById('chatInput')?.focus(), 300);
   }
-
   function closeChat() {
     document.getElementById('chatPanel').classList.remove('open');
     const fab = document.querySelector('.chat-fab');
     if (fab) fab.style.display = '';
   }
-
-  // ---------------------------------------------------------------------------
-  // Render helpers
-  // ---------------------------------------------------------------------------
   function appendBubble(role, html, id) {
     const msgs = document.getElementById('chatMessages');
-    const div = document.createElement('div');
+    const div  = document.createElement('div');
     div.className = 'chat-bubble ' + role;
     if (id) div.id = id;
     div.innerHTML = html;
@@ -975,68 +885,42 @@
     msgs.scrollTop = msgs.scrollHeight;
     return div;
   }
-
-  function removeById(id) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-  }
-
-  // Minimal markdown-like rendering: **bold**, `code`, newlines
+  function removeById(id) { document.getElementById(id)?.remove(); }
   function renderText(text) {
     return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`(.+?)`/g, '<code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:.82em;">$1</code>')
-      .replace(/\n/g, '<br>');
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/`(.+?)`/g,'<code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:.82em;">$1</code>')
+      .replace(/\n/g,'<br>');
   }
-
-  // ---------------------------------------------------------------------------
-  // Send message
-  // ---------------------------------------------------------------------------
   async function sendMessage() {
     if (chatBusy) return;
     const input = document.getElementById('chatInput');
-    const text = input.value.trim();
+    const text  = input.value.trim();
     if (!text) return;
-
-    input.value = '';
-    input.style.height = '';
+    input.value = ''; input.style.height = '';
     chatBusy = true;
     document.getElementById('chatSend').disabled = true;
-
-    // Add user turn
     conversationHistory.push({ role: 'user', content: text });
     appendBubble('user', renderText(text));
-
-    // Show typing indicator
-    appendBubble('thinking', '<span class="typing-dots"><span></span><span></span><span></span></span>', 'typingIndicator');
-
+    appendBubble('thinking','<span class="typing-dots"><span></span><span></span><span></span></span>','typingIndicator');
     try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: conversationHistory,
-          query_summary: window.QUERY_SUMMARY || null,
-        }),
+      const res  = await fetch('/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: conversationHistory, query_summary: window.QUERY_SUMMARY || null }),
       });
-
       removeById('typingIndicator');
-
       const data = await res.json();
-
       if (data.error) {
-        appendBubble('error', '<i class="bi bi-exclamation-triangle me-1"></i>' + renderText(data.error));
-        conversationHistory.pop(); // remove failed user message
+        appendBubble('error','<i class="bi bi-exclamation-triangle me-1"></i>'+renderText(data.error));
+        conversationHistory.pop();
       } else {
         conversationHistory.push({ role: 'assistant', content: data.reply });
         appendBubble('assistant', renderText(data.reply));
       }
-    } catch (err) {
+    } catch(err) {
       removeById('typingIndicator');
-      appendBubble('error', '<i class="bi bi-exclamation-triangle me-1"></i>Network error. Is the server running?');
+      appendBubble('error','<i class="bi bi-exclamation-triangle me-1"></i>Network error. Is the server running?');
       conversationHistory.pop();
     } finally {
       chatBusy = false;
@@ -1044,17 +928,9 @@
       input.focus();
     }
   }
-
   function handleChatKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-    // Auto-resize textarea
-    setTimeout(() => {
-      e.target.style.height = '';
-      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-    }, 0);
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    setTimeout(() => { e.target.style.height=''; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'; }, 0);
   }
 </script>
 

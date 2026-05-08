@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search Comparison — IMDb Local MongoDB</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #1c2128;
+      --border:   #30363d;
+      --accent:   #58a6ff;
+      --accent2:  #3fb950;
+      --text:     #c9d1d9;
+      --text-dim: #8b949e;
+      --danger:   #f85149;
+      --star:     #e3b341;
+      --orange:   #f0883e;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 0.93rem;
+      min-height: 100vh;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .topbar .logo-icon {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-size: 1.1rem; font-weight: 900; color: #0d1117;
+    }
+    .topbar .title-text { font-size: 1.05rem; font-weight: 700; color: #e6edf3; }
+    .topbar .sub-text   { font-size: 0.78rem; color: var(--text-dim); }
+    .topbar .badge-mongo {
+      margin-left: auto;
+      background: #163b2e; color: var(--accent2);
+      border: 1px solid #2d6a4f; border-radius: 20px;
+      padding: 3px 10px; font-size: 0.72rem; font-weight: 600;
+    }
+
+    /* ── Nav tabs ── */
+    .nav-tabs-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 0;
+    }
+    .nav-tab {
+      padding: 0.65rem 1.1rem;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .nav-tab:hover { color: var(--text); }
+    .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* ── Main ── */
+    .main { max-width: 1200px; margin: 0 auto; padding: 1.75rem 1.5rem; }
+
+    /* ── Form card ── */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.75rem;
+    }
+    .form-card h2 { font-size: 1rem; font-weight: 700; color: #e6edf3; margin-bottom: 0.25rem; }
+    .form-card p  { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 1rem; }
+
+    .form-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; }
+    .fg { display: flex; flex-direction: column; gap: 4px; }
+    .fg label {
+      font-size: 0.67rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim);
+    }
+    .fg input, .fg select {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      font-size: 0.85rem; padding: 5px 10px; height: 34px;
+    }
+    .fg input:focus, .fg select:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(88,166,255,.12);
+      background: var(--surface2); color: #e6edf3;
+    }
+    .fg input::placeholder { color: #484f58; }
+    .fg select option { background: var(--surface2); }
+
+    .collection-pills { display: flex; gap: 6px; margin-top: 2px; }
+    .collection-pills input[type=radio] { display: none; }
+    .collection-pills label {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px 14px;
+      font-size: 0.78rem; cursor: pointer; color: var(--text-dim);
+      transition: all .15s;
+    }
+    .collection-pills input[type=radio]:checked + label {
+      background: var(--accent); border-color: var(--accent);
+      color: #0d1117; font-weight: 700;
+    }
+
+    .btn-compare {
+      height: 34px; background: var(--accent); color: #0d1117;
+      font-weight: 700; border: none; border-radius: 6px;
+      padding: 0 20px; font-size: 0.86rem; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-compare:hover { background: #79c0ff; }
+
+    /* ── Results layout ── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 900px) { .results-grid { grid-template-columns: 1fr; } }
+
+    .method-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .method-card.regex { border-top: 3px solid var(--orange); }
+    .method-card.text  { border-top: 3px solid var(--accent2); }
+
+    .method-header {
+      padding: 0.85rem 1.1rem 0.7rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .method-header .method-name {
+      font-size: 0.95rem; font-weight: 700; color: #e6edf3;
+    }
+    .method-header .method-desc {
+      font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;
+    }
+
+    .method-stats {
+      display: flex; gap: 1.25rem; padding: 0.85rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat .val { font-size: 1.3rem; font-weight: 700; }
+    .stat .lbl { font-size: 0.66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); }
+    .stat.timing .val { color: var(--orange); }
+    .method-card.text .stat.timing .val { color: var(--accent2); }
+    .stat.stage .val  { font-size: 0.82rem; font-family: monospace; }
+
+    .plan-row {
+      padding: 0.5rem 1.1rem;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      font-family: monospace;
+      background: #0d1117;
+      word-break: break-all;
+    }
+    .plan-row .plan-label { color: #484f58; margin-right: 6px; }
+
+    .results-list { padding: 0.5rem 0; }
+    .result-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.45rem 1.1rem;
+      border-bottom: 1px solid #21262d;
+      gap: 0.5rem;
+    }
+    .result-row:last-child { border-bottom: none; }
+    .result-row:hover { background: var(--surface2); }
+
+    .result-rank {
+      font-size: 0.75rem; color: #484f58;
+      width: 20px; flex-shrink: 0; text-align: right;
+    }
+    .result-title { font-weight: 600; color: #e6edf3; font-size: 0.86rem; flex: 1; min-width: 0; }
+    .result-title .year { font-weight: 400; font-size: 0.75rem; color: var(--text-dim); }
+    .result-meta { font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+    .score-badge {
+      background: #0d2137; color: var(--accent);
+      border: 1px solid #1a3a5c; border-radius: 4px;
+      font-size: 0.7rem; padding: 1px 6px; white-space: nowrap;
+    }
+
+    /* ── Speedup banner ── */
+    .speedup-banner {
+      background: #0d2a0d;
+      border: 1px solid #2d5a2d;
+      border-radius: 8px;
+      padding: 0.85rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .speedup-banner .speedup-num {
+      font-size: 2rem; font-weight: 900; color: var(--accent2); line-height: 1;
+    }
+    .speedup-banner .speedup-desc { font-size: 0.88rem; color: var(--text); }
+    .speedup-banner .speedup-sub  { font-size: 0.76rem; color: var(--text-dim); }
+
+    /* ── Tradeoffs table ── */
+    .tradeoffs-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    .tradeoffs-card h3 {
+      font-size: 0.88rem; font-weight: 700; color: #e6edf3;
+      padding: 0.75rem 1.1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      margin: 0;
+    }
+    .tradeoff-row {
+      display: grid;
+      grid-template-columns: 160px 1fr 1fr;
+      border-bottom: 1px solid #21262d;
+    }
+    .tradeoff-row:last-child { border-bottom: none; }
+    .tradeoff-row.header { background: var(--surface2); }
+    .tradeoff-cell { padding: 0.55rem 1.1rem; font-size: 0.82rem; }
+    .tradeoff-row.header .tradeoff-cell {
+      font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim);
+    }
+    .tradeoff-cell.label { color: var(--text-dim); font-weight: 600; }
+    .yes { color: var(--accent2); }
+    .no  { color: var(--danger); }
+
+    /* ── Alerts ── */
+    .alert-err {
+      background: #21060a; border: 1px solid #6e1a1a;
+      border-radius: 8px; color: var(--danger);
+      padding: 0.8rem 1.1rem; margin-bottom: 1.25rem;
+    }
+    .warn-no-index {
+      background: #1c1a00; border: 1px solid #544f00;
+      border-radius: 8px; color: #e3b341;
+      padding: 0.75rem 1.1rem; margin-bottom: 1.25rem;
+      font-size: 0.84rem;
+    }
+    .warn-no-index code { background: #2a2500; padding: 1px 5px; border-radius: 3px; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 4rem 1rem; color: #484f58; }
+    .empty-state i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+  </style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="logo-icon">DB</div>
+  <div>
+    <div class="title-text">IMDb Search &amp; Query Optimization</div>
+    <div class="sub-text">Advanced Database Systems · Local MongoDB</div>
+  </div>
+  <span class="badge-mongo"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;"></i>MongoDB</span>
+</div>
+
+<!-- Nav tabs -->
+<div class="nav-tabs-bar">
+  <a href="/"        class="nav-tab"><i class="bi bi-search me-1"></i>Search</a>
+  <a href="/compare" class="nav-tab active"><i class="bi bi-layout-split me-1"></i>Search Comparison</a>
+</div>
+
+<div class="main">
+
+  <!-- DB offline -->
+  {% if not db_ok %}
+  <div class="alert-err">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>Cannot connect to MongoDB</strong> at <code>mongodb://localhost:27017/</code>.
+    Start MongoDB and refresh.
+  </div>
+  {% endif %}
+
+  <!-- Form -->
+  <div class="form-card">
+    <h2><i class="bi bi-layout-split me-2" style="color:var(--accent);"></i>Regex vs $text Index Comparison</h2>
+    <p>
+      Runs the same keyword search two ways — the current <code>$regex</code> approach and a
+      <code>$text</code> index lookup — and shows the query plan, execution time, docs examined,
+      and result ordering side by side.
+    </p>
+    <form method="POST" action="/compare">
+      <div class="form-row">
+
+        <div class="fg" style="flex: 1; min-width: 180px;">
+          <label>Keyword</label>
+          <input type="text" name="keyword" placeholder="e.g. batman"
+            value="{{ form.keyword }}" required />
+        </div>
+
+        <div class="fg">
+          <label>Collection</label>
+          <div class="collection-pills">
+            {% for col in collections %}
+              <input type="radio" name="collection" id="cmp_col_{{ col }}" value="{{ col }}"
+                {% if form.collection == col %}checked{% endif %}/>
+              <label for="cmp_col_{{ col }}">
+                {{ col }}
+                {% if col == 'titles_sample' %}({{ "{:,}".format(sample_count) }})
+                {% elif col == 'titles_full' %}({{ "{:,}".format(full_count) }}){% endif %}
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Runs (1–5)</label>
+          <select name="runs" style="width: 75px;">
+            {% for r in [1, 2, 3, 5] %}
+            <option value="{{ r }}" {% if form.runs == r|string %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fg">
+          <label style="visibility:hidden;">Run</label>
+          <button type="submit" class="btn-compare">
+            <i class="bi bi-play-fill me-1"></i>Run Comparison
+          </button>
+        </div>
+
+      </div>
+    </form>
+  </div>
+
+  <!-- Error -->
+  {% if error %}
+  <div class="alert-err"><i class="bi bi-x-circle-fill me-2"></i>{{ error }}</div>
+  {% endif %}
+
+  <!-- No text index warning -->
+  {% if result and not result.text_index_exists %}
+  <div class="warn-no-index">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    <strong>No $text index found</strong> on <code>{{ result.collection }}</code>.
+    Run <code>python create_indexes.py</code> to create it, then try again.
+  </div>
+  {% endif %}
+
+  <!-- Empty state -->
+  {% if not result and not error %}
+  <div class="empty-state">
+    <i class="bi bi-layout-split"></i>
+    <p>Enter a keyword above and click <strong>Run Comparison</strong>.</p>
+    <p style="font-size:0.8rem;">
+      Make sure you've run <code>python create_indexes.py</code> first
+      so the <code>$text</code> index exists.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if result %}
+
+  <!-- Speedup banner -->
+  {% if result.speedup %}
+  <div class="speedup-banner">
+    <div class="speedup-num">{{ result.speedup }}×</div>
+    <div>
+      <div class="speedup-desc">
+        <strong>$text index</strong> is {{ result.speedup }}× faster than <strong>$regex</strong>
+        for keyword <code>"{{ result.keyword }}"</code>
+      </div>
+      <div class="speedup-sub">
+        {{ result.regex.avg_ms }} ms (regex) → {{ result.text.avg_ms }} ms ($text)
+        &nbsp;·&nbsp; collection: {{ result.collection }}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Side-by-side cards -->
+  <div class="results-grid">
+
+    <!-- Regex card -->
+    <div class="method-card regex">
+      <div class="method-header">
+        <div class="method-name">
+          <i class="bi bi-slash-circle me-2" style="color:var(--orange);"></i>Regex Search <code>$regex</code>
+        </div>
+        <div class="method-desc">Contains-style match · case-insensitive · no index benefit for mid-string search</div>
+      </div>
+      <div class="method-stats">
+        <div class="stat timing">
+          <div class="val">{{ result.regex.avg_ms }} ms</div>
+          <div class="lbl">Avg time</div>
+        </div>
+        <div class="stat stage">
+          <div class="val">{{ result.regex.stage }}</div>
+          <div class="lbl">Query plan</div>
+        </div>
+        <div class="stat">
+          <div class="val" style="color:var(--text);">
+            {{ result.regex.docs_examined if result.regex.docs_examined >= 0 else '—' }}
+          </div>
+          <div class="lbl">Docs examined</div>
+        </div>
+        <div class="stat">
+          <div class="val" style="color:var(--text);">{{ result.regex.docs_returned }}</div>
+          <div class="lbl">Returned</div>
+        </div>
+      </div>
+      <div class="plan-row">
+        <span class="plan-label">plan:</span>{{ result.regex.full_plan }}
+      </div>
+      <div class="results-list">
+        {% for doc in result.regex.top %}
+        <div class="result-row">
+          <div class="result-rank">{{ loop.index }}</div>
+          <div class="result-title">
+            {{ doc.title }}
+            <span class="year">{{ doc.year or '—' }}</span>
+          </div>
+          <div class="result-meta">
+            {% if doc.rating %}⭐ {{ doc.rating }}{% endif %}
+            &nbsp;{{ doc.type or '' }}
+          </div>
+        </div>
+        {% else %}
+        <div style="padding:1rem;color:var(--text-dim);font-size:.82rem;text-align:center;">No results</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- $text card -->
+    <div class="method-card text">
+      <div class="method-header">
+        <div class="method-name">
+          <i class="bi bi-lightning-charge me-2" style="color:var(--accent2);"></i>Text Index Search <code>$text</code>
+        </div>
+        <div class="method-desc">Inverted index lookup · relevance scoring · whole-word matching only</div>
+      </div>
+      {% if result.text.error %}
+      <div style="padding:1rem;color:var(--danger);font-size:0.84rem;">
+        <i class="bi bi-x-circle me-1"></i>{{ result.text.error }}
+      </div>
+      {% else %}
+      <div class="method-stats">
+        <div class="stat timing">
+          <div class="val">{{ result.text.avg_ms }} ms</div>
+          <div class="lbl">Avg time</div>
+        </div>
+        <div class="stat stage">
+          <div class="val">{{ result.text.stage }}</div>
+          <div class="lbl">Query plan</div>
+        </div>
+        <div class="stat">
+          <div class="val" style="color:var(--text);">
+            {{ result.text.docs_examined if result.text.docs_examined >= 0 else '—' }}
+          </div>
+          <div class="lbl">Docs examined</div>
+        </div>
+        <div class="stat">
+          <div class="val" style="color:var(--text);">{{ result.text.docs_returned }}</div>
+          <div class="lbl">Returned</div>
+        </div>
+      </div>
+      <div class="plan-row">
+        <span class="plan-label">plan:</span>{{ result.text.full_plan }}
+      </div>
+      <div class="results-list">
+        {% for doc in result.text.top %}
+        <div class="result-row">
+          <div class="result-rank">{{ loop.index }}</div>
+          <div class="result-title">
+            {{ doc.title }}
+            <span class="year">{{ doc.year or '—' }}</span>
+          </div>
+          <div class="result-meta">
+            {% if doc.rating %}⭐ {{ doc.rating }}{% endif %}
+            &nbsp;{{ doc.type or '' }}
+            {% if doc.score %}<span class="score-badge">score {{ doc.score }}</span>{% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div style="padding:1rem;color:var(--text-dim);font-size:.82rem;text-align:center;">No results</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+  </div><!-- /results-grid -->
+
+  <!-- Tradeoffs table -->
+  <div class="tradeoffs-card">
+    <h3><i class="bi bi-table me-2"></i>Tradeoffs Summary</h3>
+    <div class="tradeoff-row header">
+      <div class="tradeoff-cell label">Feature</div>
+      <div class="tradeoff-cell"><i class="bi bi-slash-circle me-1" style="color:var(--orange);"></i> $regex (current)</div>
+      <div class="tradeoff-cell"><i class="bi bi-lightning-charge me-1" style="color:var(--accent2);"></i> $text index</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Speed</div>
+      <div class="tradeoff-cell no">Slow — scans collection</div>
+      <div class="tradeoff-cell yes">Fast — index lookup</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Index used</div>
+      <div class="tradeoff-cell no">✗ — COLLSCAN for mid-string</div>
+      <div class="tradeoff-cell yes">✓ — inverted text index</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Partial matches</div>
+      <div class="tradeoff-cell yes">✓ — "bat" finds "Batman"</div>
+      <div class="tradeoff-cell no">✗ — whole words only</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Relevance ranking</div>
+      <div class="tradeoff-cell no">✗ — no scoring</div>
+      <div class="tradeoff-cell yes">✓ — textScore ranking</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Case insensitive</div>
+      <div class="tradeoff-cell yes">✓ — via $options: i</div>
+      <div class="tradeoff-cell yes">✓ — built in</div>
+    </div>
+    <div class="tradeoff-row">
+      <div class="tradeoff-cell label">Stemming</div>
+      <div class="tradeoff-cell no">✗</div>
+      <div class="tradeoff-cell yes">✓ — language-aware</div>
+    </div>
+  </div>
+
+  {% endif %}<!-- /if result -->
+
+</div><!-- /main -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
