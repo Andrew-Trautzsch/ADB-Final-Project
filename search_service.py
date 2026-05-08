@@ -10,6 +10,7 @@ knowledge of how results are displayed.
 
 import re
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -196,6 +197,72 @@ def search(params: SearchParams) -> SearchResult:
         result.error = str(exc)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Result summary for LLM context
+# ---------------------------------------------------------------------------
+
+def build_summary(params: SearchParams, result: SearchResult) -> dict:
+    """
+    Build a compact, token-efficient summary of search results for LLM context.
+
+    Instead of sending all documents (~20k tokens for 200 results), this produces
+    a ~200-token dict with: applied filters, aggregate stats, and the top 10 results.
+    The LLM can call the search_movies tool for anything outside this window.
+    """
+    top_docs = []
+    for doc in result.documents[:10]:
+        rating = doc.get("rating") or {}
+        top_docs.append({
+            "title": doc.get("primaryTitle"),
+            "year": doc.get("startYear"),
+            "type": doc.get("titleType"),
+            "genres": doc.get("genres") or [],
+            "rating": rating.get("averageRating"),
+            "votes": rating.get("numVotes"),
+            "tconst": doc.get("tconst"),
+        })
+
+    genre_counts: Counter = Counter()
+    for doc in result.documents:
+        for g in doc.get("genres") or []:
+            genre_counts[g] += 1
+
+    raw_ratings = [
+        (doc.get("rating") or {}).get("averageRating")
+        for doc in result.documents
+        if (doc.get("rating") or {}).get("averageRating") is not None
+    ]
+    avg_rating = round(sum(raw_ratings) / len(raw_ratings), 2) if raw_ratings else None
+
+    filters: dict = {}
+    if params.keyword:
+        filters["keyword"] = params.keyword
+    if params.title_type:
+        filters["title_type"] = params.title_type
+    if params.genre:
+        filters["genre"] = params.genre
+    if params.start_year is not None:
+        filters["start_year"] = params.start_year
+    if params.end_year is not None:
+        filters["end_year"] = params.end_year
+    if params.min_rating is not None:
+        filters["min_rating"] = params.min_rating
+    if params.min_votes is not None:
+        filters["min_votes"] = params.min_votes
+
+    return {
+        "total_results": result.count,
+        "limit_applied": result.limit_applied,
+        "query_ms": result.query_ms,
+        "collection": params.collection_name,
+        "sort_by": params.sort_by,
+        "filters_applied": filters,
+        "top_10_results": top_docs,
+        "genre_distribution": dict(genre_counts.most_common(5)),
+        "average_rating_in_results": avg_rating,
+    }
 
 
 # ---------------------------------------------------------------------------
